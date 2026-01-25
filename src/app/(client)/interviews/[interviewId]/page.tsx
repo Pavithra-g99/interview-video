@@ -37,19 +37,24 @@ import {
 import { CandidateStatus } from "@/lib/enum";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 
+// Updated Interface to match Next.js 15/16 requirements
 interface Props {
-  params: {
+  params: Promise<{
     interviewId: string;
-  };
-  searchParams: {
+  }>;
+  searchParams: Promise<{
     call: string;
     edit: boolean;
-  };
+  }>;
 }
 
 const base_url = process.env.NEXT_PUBLIC_LIVE_URL;
 
-function InterviewHome({ params, searchParams }: Props) {
+function InterviewHome(props: Props) {
+  // Use React.use() to unwrap the promises
+  const params = React.use(props.params);
+  const searchParams = React.use(props.searchParams);
+
   const [interview, setInterview] = useState<Interview>();
   const [responses, setResponses] = useState<Response[]>();
   const { getInterviewById } = useInterviews();
@@ -120,6 +125,7 @@ function InterviewHome({ params, searchParams }: Props) {
 
     fetchOrganizationData();
   }, [organization]);
+  
   useEffect(() => {
     const fetchResponses = async () => {
       try {
@@ -137,7 +143,7 @@ function InterviewHome({ params, searchParams }: Props) {
 
     fetchResponses();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [params.interviewId]);
 
   const handleDeleteResponse = (deletedCallId: string) => {
     if (responses) {
@@ -354,6 +360,7 @@ function InterviewHome({ params, searchParams }: Props) {
                   <Button
                     className="bg-transparent shadow-none text-xs text-indigo-600 px-0 h-7 hover:scale-110 relative"
                     onClick={(event) => {
+                      event.stopPropagation();
                       router.push(
                         `/interviews/${params.interviewId}?edit=true`,
                       );
