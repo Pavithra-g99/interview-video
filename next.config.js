@@ -1,5 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable React strict mode
+  reactStrictMode: true,
+
+  // Disable Turbopack to avoid the Webpack conflict
+  experimental: {
+    turbo: false,
+  },
+
+  // Redirects
   async redirects() {
     return [
       {
@@ -9,6 +18,8 @@ const nextConfig = {
       },
     ];
   },
+
+  // Image domains
   images: {
     remotePatterns: [
       {
@@ -17,10 +28,12 @@ const nextConfig = {
       },
     ],
   },
+
+  // Custom Webpack modifications
   webpack: (webpackConfig, { webpack }) => {
     webpackConfig.plugins.push(
-      // Remove node: from import specifiers, because Next.js does not yet support node: scheme
-      // https://github.com/vercel/next.js/issues/28774
+      // Remove "node:" from import specifiers (Next.js doesn't support node: scheme yet)
+      // See: https://github.com/vercel/next.js/issues/28774
       new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
         resource.request = resource.request.replace(/^node:/, "");
       }),
