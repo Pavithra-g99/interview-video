@@ -146,9 +146,9 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      const activeCallId = webClient.getCallId();
-      if (activeCallId) {
-        onStartRecording(activeCallId);
+      // Fixed: Use the state callId instead of getCallId() to resolve Type Error
+      if (callId) {
+        onStartRecording(callId);
       }
     });
 
@@ -188,7 +188,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
     return () => {
       webClient.removeAllListeners();
     };
-  }, [onStartRecording, onStopRecording]);
+  }, [onStartRecording, onStopRecording, callId]);
 
   const onEndCallClick = async () => {
     if (isStarted) {
@@ -426,7 +426,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                     Provide Feedback
                    </Button>
                 )}
-                <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <AlertDialog onOpenChange={setIsDialogOpen} open={isDialogOpen}>
                   <AlertDialogContent>
                     <FeedbackForm email={email} onSubmit={handleFeedbackSubmit} />
                   </AlertDialogContent>
