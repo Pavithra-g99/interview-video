@@ -309,19 +309,19 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <div className="flex flex-col gap-3">
                     <input
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
+                      placeholder="Email address"
+                      value={email}
                       onChange={(e) => {
                         setEmail(e.target.value);
                       }}
-                      placeholder="Email address"
-                      value={email}
                     />
                     <input
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
+                      placeholder="First name"
+                      value={name}
                       onChange={(e) => {
                         setName(e.target.value);
                       }}
-                      placeholder="First name"
-                      value={name}
                     />
                   </div>
                 )}
@@ -329,11 +329,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <Button
                     className="h-10 px-6 rounded-lg"
                     disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
-                    onClick={startConversation}
                     style={{
                       backgroundColor: interview.theme_color ?? "#4F46E5",
                       color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
                     }}
+                    onClick={startConversation}
                   >
                     {!Loading ? "Start Interview" : <MiniLoader />}
                   </Button>
@@ -368,12 +368,12 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <div className="relative w-[280px] h-[180px] bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-xl">
                     {videoStream ? (
                       <video
-                        autoPlay
                         className="w-full h-full object-cover mirror"
-                        muted
-                        playsInline
                         ref={videoPreviewRef}
                         style={{ transform: "scaleX(-1)" }}
+                        autoPlay
+                        muted
+                        playsInline
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-white text-xs">Camera Offline</div>
