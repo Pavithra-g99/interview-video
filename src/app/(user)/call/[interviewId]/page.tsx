@@ -152,7 +152,7 @@ function InterviewInterface(props: Props) {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${currentCallId}-${Date.now()}.webm`;
 
-      const { data, error } = await supabase.storage
+      const { data } = await supabase.storage
         .from('interview-videos')
         .upload(fileName, blob);
 
@@ -169,8 +169,6 @@ function InterviewInterface(props: Props) {
         } catch (dbErr) {
           console.error("Failed to link video URL to database:", dbErr);
         }
-      } else {
-        console.error("Storage upload error:", error);
       }
       chunksRef.current = [];
     };
@@ -223,8 +221,8 @@ function InterviewInterface(props: Props) {
                 : "To ensure a smooth interview process, we require access to your camera and microphone for recording."}
             </p>
             <button 
-              onClick={requestPermissions}
               className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all"
+              onClick={requestPermissions}
             >
               {permissionError ? "Try Again" : "Enable Camera & Mic"}
             </button>
@@ -254,8 +252,8 @@ function InterviewInterface(props: Props) {
           <a
             className="font-bold underline"
             href="https://folo-up.co"
-            target="_blank"
             rel="noopener noreferrer"
+            target="_blank"
           >
             Folo<span className="text-indigo-600">Up</span>
           </a>
