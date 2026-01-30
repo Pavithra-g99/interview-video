@@ -10,10 +10,11 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
+// Fixed: Correct type for Next.js 14 params
 type Props = {
-  params: Promise<{
+  params: {
     interviewId: string;
-  }>;
+  };
 };
 
 type PopupProps = {
@@ -82,8 +83,9 @@ function PopUpMessage({ title, description, image }: PopupProps) {
   );
 }
 
-function InterviewInterface(props: Props) {
-  const params = React.use(props.params);
+// Fixed: Destructuring params directly for Next.js 14 compatibility
+function InterviewInterface({ params }: Props) {
+  const { interviewId } = params;
   const supabase = createClientComponentClient();
   
   const [interview, setInterview] = useState<Interview>();
@@ -105,7 +107,7 @@ function InterviewInterface(props: Props) {
   useEffect(() => {
     const fetchinterview = async () => {
       try {
-        const response = await getInterviewById(params.interviewId);
+        const response = await getInterviewById(interviewId);
         if (response) {
           setInterview(response);
           document.title = response.name;
@@ -119,7 +121,7 @@ function InterviewInterface(props: Props) {
     };
 
     fetchinterview();
-  }, [params.interviewId, getInterviewById]);
+  }, [interviewId, getInterviewById]);
 
   const requestPermissions = async () => {
     try {
