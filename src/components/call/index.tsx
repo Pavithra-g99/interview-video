@@ -5,7 +5,6 @@ import {
   AlarmClockIcon,
   XCircleIcon,
   CheckCircleIcon,
-  User,
 } from "lucide-react";
 import React, { useState, useEffect, useRef } from "react";
 import { Card, CardHeader, CardTitle } from "../ui/card";
@@ -43,9 +42,9 @@ const webClient = new RetellWebClient();
 
 type InterviewProps = {
   interview: Interview;
-  videoStream: MediaStream | null; // Added for video
-  onStartRecording: (callId: string) => void; // Added for video
-  onStopRecording: () => void; // Added for video
+  videoStream: MediaStream | null;
+  onStartRecording: (callId: string) => void;
+  onStopRecording: () => void;
 };
 
 type registerCallResponseType = {
@@ -85,14 +84,13 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   const [currentTimeDuration, setCurrentTimeDuration] = useState<string>("0");
 
   const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
-  const videoPreviewRef = useRef<HTMLVideoElement | null>(null); // Added for video preview
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
-  // Setup Video Preview Stream
   useEffect(() => {
     if (videoPreviewRef.current && videoStream) {
       videoPreviewRef.current.srcObject = videoStream;
     }
-  }, [videoStream, isStarted]);
+  }, [videoStream]);
 
   const handleFeedbackSubmit = async (formData: Omit<FeedbackData, "interview_id">) => {
     try {
@@ -124,15 +122,20 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     let intervalId: any;
     if (isCalling) {
-      intervalId = setInterval(() => setTime(time + 1), 10);
+      intervalId = setInterval(() => {
+        setTime((prev) => prev + 1);
+      }, 10);
     }
     setCurrentTimeDuration(String(Math.floor(time / 100)));
-    if (Number(currentTimeDuration) == Number(interviewTimeDuration) * 60) {
+    if (Number(currentTimeDuration) === Number(interviewTimeDuration) * 60) {
       webClient.stopCall();
       setIsEnded(true);
     }
-    return () => clearInterval(intervalId);
-  }, [isCalling, time, currentTimeDuration]);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isCalling, time, currentTimeDuration, interviewTimeDuration]);
 
   useEffect(() => {
     if (testEmail(email)) {
@@ -143,19 +146,24 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      // Logic for triggering the parent recording component
       const activeCallId = webClient.getCallId();
-      if (activeCallId) onStartRecording(activeCallId);
+      if (activeCallId) {
+        onStartRecording(activeCallId);
+      }
     });
 
     webClient.on("call_ended", () => {
       setIsCalling(false);
       setIsEnded(true);
-      onStopRecording(); // Stop recording when call ends
+      onStopRecording();
     });
 
-    webClient.on("agent_start_talking", () => setActiveTurn("agent"));
-    webClient.on("agent_stop_talking", () => setActiveTurn("user"));
+    webClient.on("agent_start_talking", () => {
+      setActiveTurn("agent");
+    });
+    webClient.on("agent_stop_talking", () => {
+      setActiveTurn("user");
+    });
 
     webClient.on("error", (error) => {
       console.error("An error occurred:", error);
@@ -172,8 +180,8 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
         transcripts.forEach((transcript) => {
           roleContents[transcript?.role] = transcript?.content;
         });
-        setLastInterviewerResponse(roleContents["agent"]);
-        setLastUserResponse(roleContents["user"]);
+        setLastInterviewerResponse(roleContents.agent);
+        setLastUserResponse(roleContents.user);
       }
     });
 
@@ -238,7 +246,9 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   };
 
   useEffect(() => {
-    if (interview?.time_duration) setInterviewTimeDuration(interview?.time_duration);
+    if (interview?.time_duration) {
+      setInterviewTimeDuration(interview?.time_duration);
+    }
   }, [interview]);
 
   useEffect(() => {
@@ -288,7 +298,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
               <div className="w-fit min-w-[400px] max-w-[400px] mx-auto mt-2 border border-indigo-200 rounded-md p-4 bg-slate-50">
                 {interview?.logo_url && (
                   <div className="p-1 flex justify-center mb-2">
-                    <Image src={interview?.logo_url} alt="Logo" className="h-10 w-auto" width={100} height={100} />
+                    <Image alt="Logo" className="h-10 w-auto" height={100} src={interview?.logo_url} width={100} />
                   </div>
                 )}
                 <div className="text-sm font-normal mb-4 whitespace-pre-line text-center">
@@ -298,28 +308,32 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 {!interview?.is_anonymous && (
                   <div className="flex flex-col gap-3">
                     <input
-                      value={email}
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                      }}
                       placeholder="Email address"
-                      onChange={(e) => setEmail(e.target.value)}
+                      value={email}
                     />
                     <input
-                      value={name}
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
+                      onChange={(e) => {
+                        setName(e.target.value);
+                      }}
                       placeholder="First name"
-                      onChange={(e) => setName(e.target.value)}
+                      value={name}
                     />
                   </div>
                 )}
                 <div className="flex flex-row gap-2 mt-6 justify-center">
                   <Button
                     className="h-10 px-6 rounded-lg"
+                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
+                    onClick={startConversation}
                     style={{
                       backgroundColor: interview.theme_color ?? "#4F46E5",
                       color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
                     }}
-                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
-                    onClick={startConversation}
                   >
                     {!Loading ? "Start Interview" : <MiniLoader />}
                   </Button>
@@ -329,26 +343,24 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
 
             {isStarted && !isEnded && !isOldUser && (
               <div className="flex flex-row p-2 grow h-[60vh]">
-                {/* Interviewer Column */}
                 <div className="border-r-2 border-slate-100 w-[50%] flex flex-col items-center justify-center p-4">
                   <div className="text-lg md:text-xl mb-8 text-center px-4 italic text-slate-700">
-                    "{lastInterviewerResponse || "Connecting..."}"
+                    &quot;{lastInterviewerResponse || "Connecting..."}&quot;
                   </div>
                   <div className="relative">
                     <Image
-                      src={interviewerImg || "/ai-avatar.png"}
                       alt="Interviewer"
-                      width={140}
-                      height={140}
                       className={`rounded-full object-cover transition-all ${
                         activeTurn === "agent" ? "ring-4 ring-indigo-500 ring-offset-4" : "opacity-80"
                       }`}
+                      height={140}
+                      src={interviewerImg || "/ai-avatar.png"}
+                      width={140}
                     />
                     <div className="text-center mt-4 font-semibold text-slate-500 uppercase text-xs tracking-widest">Interviewer</div>
                   </div>
                 </div>
 
-                {/* Candidate Column with Video Preview */}
                 <div className="w-[50%] flex flex-col items-center justify-center p-4">
                   <div className="text-lg md:text-xl mb-8 text-center px-4 text-indigo-600 font-medium">
                     {lastUserResponse || "Listening..."}
@@ -356,11 +368,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <div className="relative w-[280px] h-[180px] bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-xl">
                     {videoStream ? (
                       <video
-                        ref={videoPreviewRef}
                         autoPlay
+                        className="w-full h-full object-cover mirror"
                         muted
                         playsInline
-                        className="w-full h-full object-cover mirror"
+                        ref={videoPreviewRef}
                         style={{ transform: "scaleX(-1)" }}
                       />
                     ) : (
@@ -379,7 +391,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
               <div className="flex justify-center mt-4">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="outline" className="border-red-200 text-red-600 hover:bg-red-50">
+                    <Button className="border-red-200 text-red-600 hover:bg-red-50" variant="outline">
                       End Interview <XCircleIcon className="ml-2 h-4 w-4" />
                     </Button>
                   </AlertDialogTrigger>
@@ -397,7 +409,6 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
               </div>
             )}
 
-            {/* End States (isEnded, isOldUser) remain the same */}
             {(isEnded || isOldUser) && (
               <div className="flex flex-col items-center justify-center h-[60vh] text-center px-10">
                 <CheckCircleIcon className="h-16 w-16 text-green-500 mb-6" />
@@ -406,9 +417,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   {isOldUser ? "You have already responded or are not eligible." : "Thank you for participating! Your response has been recorded."}
                 </p>
                 {!isFeedbackSubmitted && !isOldUser && (
-                   <Button onClick={() => setIsDialogOpen(true)} className="bg-indigo-600">Provide Feedback</Button>
+                   <Button className="bg-indigo-600" onClick={() => {
+                     setIsDialogOpen(true);
+                   }}>Provide Feedback</Button>
                 )}
-                <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <AlertDialog onOpenChange={setIsDialogOpen} open={isDialogOpen}>
                   <AlertDialogContent>
                     <FeedbackForm email={email} onSubmit={handleFeedbackSubmit} />
                   </AlertDialogContent>
