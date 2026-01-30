@@ -3,9 +3,9 @@ const nextConfig = {
   // Enable React strict mode
   reactStrictMode: true,
 
-  // Disable Turbopack to avoid the Webpack conflict
+  // Fix: Changed from false to {} to avoid the boolean expectation error
   experimental: {
-    turbo: false,
+    turbo: {},
   },
 
   // Redirects
@@ -32,8 +32,7 @@ const nextConfig = {
   // Custom Webpack modifications
   webpack: (webpackConfig, { webpack }) => {
     webpackConfig.plugins.push(
-      // Remove "node:" from import specifiers (Next.js doesn't support node: scheme yet)
-      // See: https://github.com/vercel/next.js/issues/28774
+      // Remove "node:" from import specifiers
       new webpack.NormalModuleReplacementPlugin(/^node:/, (resource) => {
         resource.request = resource.request.replace(/^node:/, "");
       }),
