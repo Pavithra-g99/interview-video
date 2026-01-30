@@ -10,7 +10,6 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
-// Updated for Next.js 15+ Promise-based params compatibility
 type Props = {
   params: Promise<{
     interviewId: string;
@@ -84,7 +83,7 @@ function PopUpMessage({ title, description, image }: PopupProps) {
 }
 
 function InterviewInterface(props: Props) {
-  const params = React.use(props.params); // Unwrap the promise
+  const params = React.use(props.params);
   const supabase = createClientComponentClient();
   
   const [interview, setInterview] = useState<Interview>();
@@ -92,7 +91,6 @@ function InterviewInterface(props: Props) {
   const { getInterviewById } = useInterviews();
   const [interviewNotFound, setInterviewNotFound] = useState(false);
   
-  // Video Recording Refs and States
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [permissionError, setPermissionError] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -123,7 +121,6 @@ function InterviewInterface(props: Props) {
     fetchinterview();
   }, [params.interviewId, getInterviewById]);
 
-  // Handle Camera/Mic Permissions
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -142,30 +139,28 @@ function InterviewInterface(props: Props) {
     }
   };
 
-  // Recording Lifecycle Functions
   const startVideoRecording = (stream: MediaStream, currentCallId: string) => {
     const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
     
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
+      if (e.data.size > 0) {
+        chunksRef.current.push(e.data);
+      }
     };
 
     recorder.onstop = async () => {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${currentCallId}-${Date.now()}.webm`;
 
-      // 1. Upload to Supabase 'interview-videos' bucket
       const { data, error } = await supabase.storage
         .from('interview-videos')
         .upload(fileName, blob);
 
       if (data) {
-        // 2. Retrieve Public URL
         const { data: { publicUrl } } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
 
-        // 3. Save to Database via API
         try {
           await axios.post('/api/save-video-url', { 
             call_id: currentCallId, 
@@ -177,7 +172,7 @@ function InterviewInterface(props: Props) {
       } else {
         console.error("Storage upload error:", error);
       }
-      chunksRef.current = []; // Clear chunks for next session
+      chunksRef.current = [];
     };
 
     recorder.start();
@@ -188,9 +183,10 @@ function InterviewInterface(props: Props) {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     }
-    // Clean up media stream tracks
     if (mediaStream) {
-      mediaStream.getTracks().forEach(track => track.stop());
+      mediaStream.getTracks().forEach((track) => {
+        track.stop();
+      });
     }
   };
 
@@ -214,7 +210,6 @@ function InterviewInterface(props: Props) {
             image="/closed.png"
           />
         ) : !mediaStream ? (
-          /* Permission Request Step */
           <div className="flex flex-col items-center justify-center h-[80vh] border-2 border-dashed rounded-xl bg-gray-50 border-gray-300">
             {permissionError ? (
               <VideoOff size={60} className="text-red-500 mb-4" />
@@ -235,7 +230,6 @@ function InterviewInterface(props: Props) {
             </button>
           </div>
         ) : (
-          /* Main Interview Interface with Recording Props */
           <Call 
             interview={interview} 
             videoStream={mediaStream}
@@ -245,7 +239,6 @@ function InterviewInterface(props: Props) {
         )}
       </div>
 
-      {/* Mobile Restriction View */}
       <div className=" md:hidden flex flex-col items-center justify-center my-auto">
         <div className="mt-48 px-3">
           <p className="text-center my-5 text-md font-semibold">
