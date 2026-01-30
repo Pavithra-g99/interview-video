@@ -273,7 +273,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
       {isStarted && <TabSwitchWarning />}
       <div className="bg-white rounded-md md:w-[80%] w-[90%]">
         <Card className="h-[88vh] rounded-lg border-2 border-b-4 border-r-4 border-black text-xl font-bold transition-all md:block dark:border-white">
-          <div>
+          <div className="flex flex-col h-full">
             <div className="m-4 h-[15px] rounded-lg border-[1px] border-black overflow-hidden">
               <div
                 className="bg-indigo-600 h-[15px] transition-all duration-300"
@@ -328,11 +328,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 <div className="flex flex-row gap-2 mt-6 justify-center">
                   <Button
                     className="h-10 px-6 rounded-lg"
-                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     style={{
                       backgroundColor: interview.theme_color ?? "#4F46E5",
                       color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
                     }}
+                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     onClick={startConversation}
                   >
                     {!Loading ? "Start Interview" : <MiniLoader />}
@@ -388,7 +388,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
             )}
 
             {isStarted && !isEnded && (
-              <div className="flex justify-center mt-4">
+              <div className="flex justify-center mt-4 pb-8">
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
                     <Button className="border-red-200 text-red-600 hover:bg-red-50" variant="outline">
@@ -410,18 +410,23 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
             )}
 
             {(isEnded || isOldUser) && (
-              <div className="flex flex-col items-center justify-center h-[60vh] text-center px-10">
+              <div className="flex flex-col items-center justify-center grow text-center px-10">
                 <CheckCircleIcon className="h-16 w-16 text-green-500 mb-6" />
                 <h2 className="text-2xl font-bold mb-2">Interview Completed</h2>
                 <p className="text-slate-500 mb-8">
                   {isOldUser ? "You have already responded or are not eligible." : "Thank you for participating! Your response has been recorded."}
                 </p>
                 {!isFeedbackSubmitted && !isOldUser && (
-                   <Button className="bg-indigo-600" onClick={() => {
-                     setIsDialogOpen(true);
-                   }}>Provide Feedback</Button>
+                   <Button 
+                    className="bg-indigo-600" 
+                    onClick={() => {
+                      setIsDialogOpen(true);
+                    }}
+                   >
+                    Provide Feedback
+                   </Button>
                 )}
-                <AlertDialog onOpenChange={setIsDialogOpen} open={isDialogOpen}>
+                <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                   <AlertDialogContent>
                     <FeedbackForm email={email} onSubmit={handleFeedbackSubmit} />
                   </AlertDialogContent>
@@ -430,6 +435,19 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
             )}
           </div>
         </Card>
+        <a
+          className="flex flex-row justify-center align-middle mt-3"
+          href="https://folo-up.co/"
+          target="_blank"
+        >
+          <div className="text-center text-md font-semibold mr-2 ">
+            Powered by{" "}
+            <span className="font-bold">
+              Folo<span className="text-indigo-600">Up</span>
+            </span>
+          </div>
+          <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500 " />
+        </a>
       </div>
     </div>
   );
