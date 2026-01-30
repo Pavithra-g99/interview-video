@@ -13,6 +13,7 @@ export interface Response {
   analytics: any;
   candidate_status: string;
   tab_switch_count: number;
+  video_url?: string; // Added for Phase 4
 }
 
 export interface Analytics {
@@ -72,6 +73,7 @@ export interface CallData {
     }[];
   }[];
   recording_url: string;
+  video_url?: string; // Added for Phase 4 to match CallInfo component
   public_log_url: string;
   e2e_latency: {
     p50: number;
