@@ -127,8 +127,12 @@ function InterviewInterface(props: Props) {
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: true, 
-        audio: true 
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user"
+        },
+        audio: true
       });
       setMediaStream(stream);
       setPermissionError(false);
