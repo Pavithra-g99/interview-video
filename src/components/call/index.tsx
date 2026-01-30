@@ -146,7 +146,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      // Fixed: Use the state callId instead of getCallId() to resolve Type Error
+      // Fix: Use the callId from state to avoid SDK Property error
       if (callId) {
         onStartRecording(callId);
       }
@@ -426,7 +426,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                     Provide Feedback
                    </Button>
                 )}
-                <AlertDialog onOpenChange={setIsDialogOpen} open={isDialogOpen}>
+                <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                   <AlertDialogContent>
                     <FeedbackForm email={email} onSubmit={handleFeedbackSubmit} />
                   </AlertDialogContent>
@@ -438,6 +438,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
         <a
           className="flex flex-row justify-center align-middle mt-3"
           href="https://folo-up.co/"
+          rel="noopener noreferrer"
           target="_blank"
         >
           <div className="text-center text-md font-semibold mr-2 ">
