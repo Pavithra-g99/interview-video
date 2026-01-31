@@ -37,12 +37,15 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { InterviewerService } from "@/services/interviewers.service";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 const webClient = new RetellWebClient();
 
+// Fix: Correct the props type to match what the parent is sending
 type InterviewProps = {
   interview: Interview;
+  videoStream: MediaStream | null;
+  onStartRecording: (callId: string) => void;
+  onStopRecording: () => void;
 };
 
 type registerCallResponseType = {
@@ -59,8 +62,7 @@ type transcriptType = {
   content: string;
 };
 
-function Call({ interview }: InterviewProps) {
-  const supabase = createClientComponentClient();
+function Call({ interview, videoStream, onStartRecording, onStopRecording }: InterviewProps) {
   const { createResponse } = useResponses();
   const { tabSwitchCount } = useTabSwitchPrevention();
 
@@ -71,7 +73,6 @@ function Call({ interview }: InterviewProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [isValidEmail, setIsValidEmail] = useState(false);
-  const [isOldUser, setIsOldUser] = useState(false);
   const [callId, setCallId] = useState("");
   const [lastInterviewerResponse, setLastInterviewerResponse] = useState("");
   const [lastUserResponse, setLastUserResponse] = useState("");
@@ -81,95 +82,29 @@ function Call({ interview }: InterviewProps) {
   const [time, setTime] = useState(0);
   const [currentTimeDuration, setCurrentTimeDuration] = useState("0");
 
-  /* ================= VIDEO RECORDING STATE ================= */
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const videoChunksRef = useRef<Blob[]>([]);
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
 
-  /* ================= CAMERA + RECORDING ================= */
-  const startCameraAndRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: true,
-      audio: true,
-    });
-
-    setVideoStream(stream);
-
-    if (videoPreviewRef.current) {
-      videoPreviewRef.current.srcObject = stream;
-      videoPreviewRef.current.muted = true;
-      videoPreviewRef.current.play();
+  // Sync the video stream to the preview element
+  useEffect(() => {
+    if (videoPreviewRef.current && videoStream) {
+      videoPreviewRef.current.srcObject = videoStream;
     }
-
-    startVideoRecording(stream);
-  };
-
-  const startVideoRecording = (stream: MediaStream) => {
-    videoChunksRef.current = [];
-
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) videoChunksRef.current.push(e.data);
-    };
-
-    recorder.onstop = async () => {
-      const blob = new Blob(videoChunksRef.current, {
-        type: "video/webm",
-      });
-
-      if (blob.size > 0) await uploadVideo(blob);
-    };
-
-    recorder.start();
-    mediaRecorderRef.current = recorder;
-  };
-
-  const stopVideoRecording = () => {
-    if (mediaRecorderRef.current?.state !== "inactive") {
-      mediaRecorderRef.current.stop();
-    }
-    videoStream?.getTracks().forEach((t) => t.stop());
-  };
-
-  const uploadVideo = async (blob: Blob) => {
-    const filePath = `videos/${callId}-${Date.now()}.webm`;
-
-    const { error } = await supabase.storage
-      .from("interview-videos")
-      .upload(filePath, blob);
-
-    if (error) {
-      console.error("Video upload failed:", error);
-      return;
-    }
-
-    const { data } = supabase.storage
-      .from("interview-videos")
-      .getPublicUrl(filePath);
-
-    await fetch("/api/save-video-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        call_id: callId,
-        videoUrl: data.publicUrl,
-      }),
-    });
-  };
+  }, [videoStream]);
 
   /* ================= RETELL EVENTS ================= */
   useEffect(() => {
-    webClient.on("call_started", async () => {
+    webClient.on("call_started", () => {
       setIsCalling(true);
-      await startCameraAndRecording();
+      // Start the recording logic defined in the parent
+      if (callId) {
+        onStartRecording(callId);
+      }
     });
 
     webClient.on("call_ended", () => {
       setIsCalling(false);
       setIsEnded(true);
-      stopVideoRecording();
+      onStopRecording();
     });
 
     webClient.on("agent_start_talking", () => setActiveTurn("agent"));
@@ -185,13 +120,14 @@ function Call({ interview }: InterviewProps) {
       }
     });
 
-    return () => webClient.removeAllListeners();
-  }, [callId]);
+    return () => {
+      webClient.removeAllListeners();
+    };
+  }, [callId, onStartRecording, onStopRecording]);
 
   /* ================= START INTERVIEW ================= */
   const startConversation = async () => {
     setLoading(true);
-
     try {
       const registerCallResponse: registerCallResponseType = await axios.post(
         "/api/register-call",
@@ -206,9 +142,7 @@ function Call({ interview }: InterviewProps) {
         }
       );
 
-      const { call_id, access_token } =
-        registerCallResponse.data.registerCallResponse;
-
+      const { call_id, access_token } = registerCallResponse.data.registerCallResponse;
       setCallId(call_id);
 
       await webClient.startCall({ accessToken: access_token });
@@ -228,58 +162,71 @@ function Call({ interview }: InterviewProps) {
     }
   };
 
-  /* ================= UI ================= */
+  useEffect(() => {
+    const fetchInterviewer = async () => {
+      const interviewer = await InterviewerService.getInterviewer(interview.interviewer_id);
+      setInterviewerImg(interviewer.image);
+    };
+    fetchInterviewer();
+  }, [interview.interviewer_id]);
+
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
       {isStarted && <TabSwitchWarning />}
 
-      <Card className="md:w-[80%] w-[95%] h-[88vh]">
+      <Card className="md:w-[80%] w-[95%] h-[88vh] flex flex-col items-center justify-center border-2 border-black">
         {!isStarted && !isEnded && (
-          <div className="p-6 text-center">
+          <div className="p-6 text-center w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">{interview.name}</h2>
             <input
               placeholder="Email"
-              className="border p-2 w-full mb-2"
+              className="border p-2 w-full mb-2 rounded"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
             <input
               placeholder="Name"
-              className="border p-2 w-full mb-4"
+              className="border p-2 w-full mb-4 rounded"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
-            <Button onClick={startConversation} disabled={Loading}>
+            <Button onClick={startConversation} disabled={Loading || !email || !name} className="w-full">
               {Loading ? <MiniLoader /> : "Start Interview"}
             </Button>
           </div>
         )}
 
         {isStarted && !isEnded && (
-          <div className="flex h-full">
-            <div className="w-1/2 flex flex-col items-center justify-center">
+          <div className="flex w-full h-full p-4">
+            <div className="w-1/2 flex flex-col items-center justify-center p-4 text-center">
               <p className="italic text-lg mb-6">
-                {lastInterviewerResponse || "Listening..."}
+                &quot;{lastInterviewerResponse || "Listening..."}&quot;
               </p>
               <Image
                 src={interviewerImg || "/ai-avatar.png"}
                 alt="AI"
                 width={140}
                 height={140}
-                className="rounded-full"
+                className="rounded-full border-4 border-indigo-500"
               />
+              <p className="mt-4 font-bold uppercase text-xs">Interviewer</p>
             </div>
 
-            <div className="w-1/2 flex flex-col items-center justify-center">
-              <video
-                ref={videoPreviewRef}
-                autoPlay
-                muted
-                playsInline
-                className="w-72 h-48 rounded-lg border bg-black"
-                style={{ transform: "scaleX(-1)" }}
-              />
-              <p className="mt-2 text-xs uppercase">Recording</p>
+            <div className="w-1/2 flex flex-col items-center justify-center p-4">
+              <div className="relative">
+                <video
+                  ref={videoPreviewRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="w-80 h-52 rounded-lg border-4 border-black bg-black object-cover"
+                  style={{ transform: "scaleX(-1)" }}
+                />
+                <div className="absolute top-2 left-2 bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                  REC
+                </div>
+              </div>
+              <p className="mt-4 font-bold uppercase text-xs">You (Candidate)</p>
             </div>
           </div>
         )}
@@ -287,10 +234,8 @@ function Call({ interview }: InterviewProps) {
         {isEnded && (
           <div className="flex flex-col items-center justify-center h-full">
             <CheckCircleIcon className="h-16 w-16 text-green-500 mb-4" />
-            <h2 className="text-xl font-bold">Interview Completed</h2>
-            <p className="text-gray-500">
-              Audio & video successfully recorded.
-            </p>
+            <h2 className="text-2xl font-bold">Interview Completed</h2>
+            <p className="text-gray-500">Your recording has been saved successfully.</p>
           </div>
         )}
       </Card>
