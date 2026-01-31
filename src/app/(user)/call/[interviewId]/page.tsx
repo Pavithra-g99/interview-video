@@ -10,7 +10,6 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
-// Fixed: Correct type for Next.js 14 params
 type Props = {
   params: {
     interviewId: string;
@@ -83,7 +82,6 @@ function PopUpMessage({ title, description, image }: PopupProps) {
   );
 }
 
-// Fixed: Destructuring params directly for Next.js 14 compatibility
 function InterviewInterface({ params }: Props) {
   const { interviewId } = params;
   const supabase = createClientComponentClient();
@@ -159,14 +157,15 @@ function InterviewInterface({ params }: Props) {
         .upload(fileName, blob);
 
       if (data) {
-        const { data: { publicUrl } } = supabase.storage
+        // Retrieve the specific Public URL to save in the database
+        const { data: urlData } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
 
         try {
           await axios.post('/api/save-video-url', { 
             call_id: currentCallId, 
-            videoUrl: publicUrl 
+            videoUrl: urlData.publicUrl 
           });
         } catch (dbErr) {
           console.error("Failed to link video URL to database:", dbErr);
