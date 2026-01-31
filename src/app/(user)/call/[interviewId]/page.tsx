@@ -77,50 +77,15 @@ function InterviewInterface({ params }: Props) {
     fetchInterview();
   }, [interviewId, getInterviewById]);
 
-  // NEW: Updated to capture both Microphone and AI Tab Audio
   const requestPermissions = async () => {
     try {
-      // 1. Capture Camera and Microphone
-      const userStream = await navigator.mediaDevices.getUserMedia({ 
+      const stream = await navigator.mediaDevices.getUserMedia({ 
         video: { width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: true 
       });
-
-      // 2. Capture Tab Audio (Prompt for Tab Share)
-      const tabStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true, // Required for getDisplayMedia to work
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        }
-      });
-
-      // 3. Create Audio Context to merge the two audio sources
-      const audioContext = new AudioContext();
-      const dest = audioContext.createMediaStreamDestination();
-      
-      // Source 1: Microphone
-      const micSource = audioContext.createMediaStreamSource(userStream);
-      micSource.connect(dest);
-
-      // Source 2: Tab Audio (AI agent)
-      const tabAudioSource = audioContext.createMediaStreamSource(tabStream);
-      tabAudioSource.connect(dest);
-
-      // 4. Combine Video from Camera with the Merged Audio
-      const combinedStream = new MediaStream([
-        ...userStream.getVideoTracks(),
-        ...dest.stream.getAudioTracks()
-      ]);
-
-      setMediaStream(combinedStream);
+      setMediaStream(stream);
       setPermissionError(false);
-
-      // Clean up the unused tab video track to avoid showing a redundant preview
-      tabStream.getVideoTracks().forEach(track => track.stop());
-
     } catch (err) {
-      console.error("Hardware access denied", err);
       setPermissionError(true);
     }
   };
@@ -145,9 +110,7 @@ function InterviewInterface({ params }: Props) {
 
   const stopVideoRecording = () => {
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-    }
+    mediaStream?.getTracks().forEach(track => track.stop());
   };
 
   if (!interview) return interviewNotFound ? <PopUpMessage title="Invalid URL" description="Check URL" image="/invalid-url.png" /> : <PopupLoader />;
@@ -158,7 +121,7 @@ function InterviewInterface({ params }: Props) {
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-2 border-indigo-100">
           <ShieldCheck className="mx-auto h-16 w-16 text-indigo-600 mb-4" />
           <h1 className="text-2xl font-bold mb-2">Ready for your interview?</h1>
-          <p className="text-gray-500 mb-6 text-sm">Verify your camera is working before we begin. <b>Note:</b> You will be prompted to share your screen tab to record audio.</p>
+          <p className="text-gray-500 mb-6 text-sm">Verify your camera is working before we begin.</p>
           <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden mb-6 border-4 border-slate-200 shadow-inner">
             {mediaStream ? (
               <video autoPlay muted playsInline className="w-full h-full object-cover" ref={el => { if (el) el.srcObject = mediaStream; }} />
@@ -170,7 +133,7 @@ function InterviewInterface({ params }: Props) {
             )}
           </div>
           {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">Enable Camera & Mic</button>
+            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">Enable Camera & Mic</button>
           ) : (
             <button onClick={() => setIsVerified(true)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">Hardware Verified <CheckCircle size={20} /></button>
           )}
