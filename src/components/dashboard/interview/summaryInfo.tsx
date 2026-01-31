@@ -71,12 +71,14 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
 
   const [tableData, setTableData] = useState<TableData[]>([]);
 
+  // UPDATED: Added video_url to the table data preparation
   const prepareTableData = (responses: Response[]): TableData[] => {
     return responses.map((response) => ({
       call_id: response.call_id,
       name: response.name || "Anonymous",
       overallScore: response.analytics?.overallScore || 0,
       communicationScore: response.analytics?.communication?.score || 0,
+      video_url: response.video_url || "", // Passing the Supabase video URL
       callSummary:
         response.analytics?.softSkillSummary ||
         response.details?.call_analysis?.call_summary ||
@@ -189,6 +191,7 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
           </p>
           <div className="flex flex-col gap-1 my-2 mt-4 mx-2 p-4 rounded-2xl bg-slate-50 shadow-md">
             <ScrollArea className="h-[250px]">
+              {/* The DataTable will now receive the video_url within the tableData */}
               <DataTable data={tableData} interviewId={interview?.id || ""} />
             </ScrollArea>
           </div>
