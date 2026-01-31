@@ -21,7 +21,6 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Cal
   const [callId, setCallId] = useState("");
   const [transcript, setTranscript] = useState({ agent: "", user: "" });
   
-  // FIX: Explicitly defining videoPreviewRef to resolve the build error
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
   // Connect stream to the preview box
@@ -45,19 +44,24 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Cal
     });
 
     webClient.on("update", (update) => {
-      if (update.transcript) {
+      if (update.transcript && update.transcript.length > 0) {
         const last = update.transcript[update.transcript.length - 1];
         if (last.role === "agent") setTranscript(prev => ({ ...prev, agent: last.content }));
         if (last.role === "user") setTranscript(prev => ({ ...prev, user: last.content }));
       }
     });
 
-    return () => webClient.removeAllListeners();
+    // FIX: Explicitly wrap in curly braces to return void, not the webClient object
+    return () => {
+      webClient.removeAllListeners();
+    };
   }, [callId, onStartRecording, onStopRecording]);
 
   const startInterview = async () => {
     try {
-      const res = await axios.post("/api/register-call", { interviewer_id: interview.interviewer_id });
+      const res = await axios.post("/api/register-call", { 
+        interviewer_id: interview.interviewer_id 
+      });
       const { access_token, call_id } = res.data.registerCallResponse;
       setCallId(call_id);
       await webClient.startCall({ accessToken: access_token });
@@ -66,7 +70,6 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Cal
     }
   };
 
-  // FIX: Ensure a valid JSX element is returned to resolve the component error
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
       <Card className="max-w-4xl w-full p-8 shadow-2xl bg-white rounded-3xl border-2 border-black">
