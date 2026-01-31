@@ -47,15 +47,6 @@ type InterviewProps = {
   onStopRecording: () => void;
 };
 
-type registerCallResponseType = {
-  data: {
-    registerCallResponse: {
-      call_id: string;
-      access_token: string;
-    };
-  };
-};
-
 type transcriptType = {
   role: string;
   content: string;
@@ -86,7 +77,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
-  // Fix: Essential logic to display the camera feed in the preview box
+  // Fix: Attach live stream to video element
   useEffect(() => {
     if (videoPreviewRef.current && videoStream) {
       videoPreviewRef.current.srcObject = videoStream;
@@ -106,45 +97,37 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
         setIsDialogOpen(false);
       }
     } catch (error) {
-      console.error("Error submitting feedback:", error);
+      console.error("Feedback error:", error);
     }
   };
 
   useEffect(() => {
     if (lastUserResponseRef.current) {
-      const { current } = lastUserResponseRef;
-      current.scrollTop = current.scrollHeight;
+      lastUserResponseRef.current.scrollTop = lastUserResponseRef.current.scrollHeight;
     }
   }, [lastUserResponse]);
 
   useEffect(() => {
     let intervalId: any;
     if (isCalling) {
-      intervalId = setInterval(() => {
-        setTime((prev) => prev + 1);
-      }, 10);
+      intervalId = setInterval(() => setTime((prev) => prev + 1), 10);
     }
     setCurrentTimeDuration(String(Math.floor(time / 100)));
     if (Number(currentTimeDuration) === Number(interviewTimeDuration) * 60) {
       webClient.stopCall();
       setIsEnded(true);
     }
-
     return () => clearInterval(intervalId);
   }, [isCalling, time, currentTimeDuration, interviewTimeDuration]);
 
   useEffect(() => {
-    if (testEmail(email)) {
-      setIsValidEmail(true);
-    }
+    if (testEmail(email)) setIsValidEmail(true);
   }, [email]);
 
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      if (callId) {
-        onStartRecording(callId);
-      }
+      if (callId) onStartRecording(callId);
     });
 
     webClient.on("call_ended", () => {
@@ -157,7 +140,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
     webClient.on("agent_stop_talking", () => setActiveTurn("user"));
 
     webClient.on("error", (error) => {
-      console.error("Call error:", error);
+      console.error("SDK Error:", error);
       webClient.stopCall();
       setIsEnded(true);
       setIsCalling(false);
@@ -209,7 +192,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
       if (OldUser) {
         setIsOldUser(true);
       } else {
-        const registerCallResponse: registerCallResponseType = await axios.post(
+        const registerCallResponse = await axios.post(
           "/api/register-call",
           { dynamic_data: data, interviewer_id: interview?.interviewer_id },
         );
@@ -230,16 +213,14 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
         }
       }
     } catch (error) {
-      console.error("Failed to start conversation:", error);
+      console.error("Startup error:", error);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (interview?.time_duration) {
-      setInterviewTimeDuration(interview?.time_duration);
-    }
+    if (interview?.time_duration) setInterviewTimeDuration(interview?.time_duration);
   }, [interview]);
 
   useEffect(() => {
@@ -294,7 +275,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 )}
                 <div className="text-sm font-normal mb-4 whitespace-pre-line text-center">
                   {interview?.description}
-                  <p className="font-bold mt-2">Grant camera/microphone access. Tab switching is recorded.</p>
+                  <p className="font-bold mt-2">Grant camera access. Tab switching is recorded.</p>
                 </div>
                 {!interview?.is_anonymous && (
                   <div className="flex flex-col gap-3">
@@ -330,8 +311,8 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
 
             {isStarted && !isEnded && !isOldUser && (
               <div className="flex flex-row p-2 grow h-[60vh]">
-                <div className="border-r-2 border-slate-100 w-[50%] flex flex-col items-center justify-center p-4">
-                  <div className="text-lg md:text-xl mb-8 text-center px-4 italic text-slate-700">
+                <div className="border-r-2 border-slate-100 w-[50%] flex flex-col items-center justify-center p-4 text-center">
+                  <div className="text-lg md:text-xl mb-8 italic text-slate-700">
                     &quot;{lastInterviewerResponse || "Connecting..."}&quot;
                   </div>
                   <div className="relative">
@@ -344,7 +325,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                       src={interviewerImg || "/ai-avatar.png"}
                       width={140}
                     />
-                    <div className="text-center mt-4 font-semibold text-slate-500 uppercase text-xs tracking-widest">Interviewer</div>
+                    <div className="text-center mt-4 font-semibold text-slate-500 uppercase text-xs">Interviewer</div>
                   </div>
                 </div>
 
@@ -361,6 +342,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                         playsInline
                         ref={videoPreviewRef}
                         style={{ transform: "scaleX(-1)" }}
+                        onLoadedMetadata={(e) => e.currentTarget.play()}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-white text-xs">Camera Offline</div>
@@ -369,7 +351,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                       <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> REC
                     </div>
                   </div>
-                  <div className="text-center mt-4 font-semibold text-slate-500 uppercase text-xs tracking-widest">You (Candidate)</div>
+                  <div className="text-center mt-4 font-semibold text-slate-500 uppercase text-xs">You (Candidate)</div>
                 </div>
               </div>
             )}
@@ -400,7 +382,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
               <div className="flex flex-col items-center justify-center grow text-center px-10">
                 <CheckCircleIcon className="h-16 w-16 text-green-500 mb-6" />
                 <h2 className="text-2xl font-bold mb-2">Interview Completed</h2>
-                <p className="text-slate-500 mb-8">Response has been recorded.</p>
+                <p className="text-slate-500 mb-8">Response recorded successfully.</p>
                 {!isFeedbackSubmitted && !isOldUser && (
                    <Button 
                     className="bg-indigo-600" 
@@ -418,6 +400,20 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
             )}
           </div>
         </Card>
+        <a
+          className="flex flex-row justify-center align-middle mt-3"
+          href="https://folo-up.co/"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <div className="text-center text-md font-semibold mr-2 ">
+            Powered by{" "}
+            <span className="font-bold">
+              Folo<span className="text-indigo-600">Up</span>
+            </span>
+          </div>
+          <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500 " />
+        </a>
       </div>
     </div>
   );
