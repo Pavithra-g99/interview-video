@@ -1,50 +1,32 @@
 "use client";
+import React, { useState, useEffect, useRef } from "react";
+// ... other imports
 
-// ... other imports ...
-
-// FIX: Update this type to include the missing properties being passed from the parent
 type InterviewProps = {
-  interview: Interview;
+  interview: any;
   videoStream: MediaStream | null;
   onStartRecording: (callId: string) => void;
   onStopRecording: () => void;
 };
 
-// FIX: Update the function signature to destructure these new props
-function Call({ 
-  interview, 
-  videoStream, 
-  onStartRecording, 
-  onStopRecording 
-}: InterviewProps) {
-  
-  // ... your existing state (isStarted, isEnded, callId, etc.) ...
+function Call({ interview, videoStream, onStartRecording, onStopRecording }: InterviewProps) {
+  // ... all your existing state and useEffect hooks here
 
-  /* ================= RETELL EVENTS ================= */
-  useEffect(() => {
-    webClient.on("call_started", () => {
-      setIsCalling(true);
-      // Trigger the recording function passed from the parent
-      if (callId) {
-        onStartRecording(callId);
-      }
-    });
-
-    webClient.on("call_ended", () => {
-      setIsCalling(false);
-      setIsEnded(true);
-      // Trigger the stop function passed from the parent
-      onStopRecording();
-    });
-
-    // ... other listeners (agent_talking, update, etc.) ...
-
-    return () => {
-      webClient.removeAllListeners();
-    };
-  }, [callId, onStartRecording, onStopRecording]); // Ensure props are in dependency array
-
-  // ... rest of the component logic and JSX ...
+  // FIX: Ensure you are explicitly returning the JSX
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      {/* ... your existing Card and UI content ... */}
+      <div className="relative group">
+         <video 
+           ref={videoPreviewRef} 
+           autoPlay 
+           muted 
+           playsInline 
+           className="w-full h-full object-cover rounded-2xl" 
+         />
+      </div>
+    </div>
+  );
 }
 
 export default Call;
