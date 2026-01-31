@@ -140,8 +140,14 @@ function InterviewInterface({ params }: Props) {
   };
 
   const startVideoRecording = (stream: MediaStream, currentCallId: string) => {
-    // Collect data every 1 second to ensure chunks are captured
-    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus' });
+    chunksRef.current = [];
+    
+    // Choose compatible mime type
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') 
+      ? 'video/webm;codecs=vp8,opus' 
+      : 'video/webm';
+
+    const recorder = new MediaRecorder(stream, { mimeType });
     
     recorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
@@ -150,19 +156,21 @@ function InterviewInterface({ params }: Props) {
     };
 
     recorder.onstop = async () => {
+      if (chunksRef.current.length === 0) return;
+
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${currentCallId}-${Date.now()}.webm`;
 
-      const { data, error } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('interview-videos')
         .upload(fileName, blob);
 
-      if (error) {
-        console.error("Storage upload failed:", error.message);
+      if (uploadError) {
+        console.error("Upload error:", uploadError.message);
         return;
       }
 
-      if (data) {
+      if (uploadData) {
         // Retrieve and save the Public URL
         const { data: { publicUrl } } = supabase.storage
           .from('interview-videos')
@@ -174,12 +182,13 @@ function InterviewInterface({ params }: Props) {
             videoUrl: publicUrl 
           });
         } catch (dbErr) {
-          console.error("Failed to update database with video link:", dbErr);
+          console.error("Failed to link video URL to database:", dbErr);
         }
       }
       chunksRef.current = [];
     };
 
+    // Use 1-second timeslices to ensure data is captured
     recorder.start(1000); 
     mediaRecorderRef.current = recorder;
   };
@@ -222,11 +231,11 @@ function InterviewInterface({ params }: Props) {
             <h2 className="text-2xl font-bold mb-2">Camera Access Required</h2>
             <p className="text-gray-600 mb-8 max-w-md text-center">
               {permissionError 
-                ? "Please enable camera/microphone access in your browser settings."
-                : "We require access to your camera and microphone for recording."}
+                ? "Please enable camera access in your settings."
+                : "Camera access is required for the recording."}
             </p>
             <button 
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700"
+              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold"
               onClick={requestPermissions}
             >
               {permissionError ? "Try Again" : "Enable Camera & Mic"}
@@ -243,9 +252,9 @@ function InterviewInterface({ params }: Props) {
       </div>
 
       <div className=" md:hidden flex flex-col items-center justify-center my-auto">
-        <div className="mt-48 px-3">
-          <p className="text-center my-5 text-md font-semibold">{interview?.name}</p>
-          <p className="text-center text-gray-600 my-5">Please use a PC to respond.</p>
+        <div className="mt-48 px-3 text-center">
+           <p className="font-semibold">{interview?.name}</p>
+           <p className="text-gray-600">Please use a PC to respond.</p>
         </div>
       </div>
     </div>
