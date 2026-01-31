@@ -157,7 +157,7 @@ function InterviewInterface({ params }: Props) {
         .upload(fileName, blob);
 
       if (data) {
-        // Retrieve the specific Public URL to save in the database
+        // Generating the Public URL after successful upload
         const { data: urlData } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
