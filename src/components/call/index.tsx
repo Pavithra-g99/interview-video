@@ -146,7 +146,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      // Fix: Use the callId from state to avoid SDK Property error
+      // Fixed: Using callId state as requested to avoid SDK property errors
       if (callId) {
         onStartRecording(callId);
       }
@@ -328,11 +328,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 <div className="flex flex-row gap-2 mt-6 justify-center">
                   <Button
                     className="h-10 px-6 rounded-lg"
+                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     style={{
                       backgroundColor: interview.theme_color ?? "#4F46E5",
                       color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
                     }}
-                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     onClick={startConversation}
                   >
                     {!Loading ? "Start Interview" : <MiniLoader />}
@@ -368,12 +368,12 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <div className="relative w-[280px] h-[180px] bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-200 shadow-xl">
                     {videoStream ? (
                       <video
-                        className="w-full h-full object-cover mirror"
-                        ref={videoPreviewRef}
-                        style={{ transform: "scaleX(-1)" }}
                         autoPlay
+                        className="w-full h-full object-cover mirror"
                         muted
                         playsInline
+                        ref={videoPreviewRef}
+                        style={{ transform: "scaleX(-1)" }}
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-white text-xs">Camera Offline</div>
