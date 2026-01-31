@@ -16,7 +16,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { ArrowUpDown, ExternalLink } from "lucide-react";
+import { ArrowUpDown, ExternalLink, Video } from "lucide-react";
 import {
   Tooltip,
   TooltipTrigger,
@@ -24,12 +24,14 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 
+// UPDATED: Included video_url in the type definition
 export type TableData = {
   call_id: string;
   name: string;
   overallScore: number;
   communicationScore: number;
   callSummary: string;
+  video_url?: string; 
 };
 
 interface DataTableProps {
@@ -173,6 +175,46 @@ function DataTable({ data, interviewId }: DataTableProps) {
         const b = rowB.getValue(columnId) as number | null;
 
         return customSortingFn(a, b);
+      },
+    },
+    // NEW: Added Video Recording column
+    {
+      accessorKey: "video_url",
+      header: () => (
+        <div className="w-full justify-center font-semibold text-[15px] mb-1 text-black flex items-center gap-1">
+          Video
+        </div>
+      ),
+      cell: ({ row }) => {
+        const videoUrl = row.original.video_url;
+        return (
+          <div className="min-h-[2.6em] flex items-center justify-center">
+            {videoUrl ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="p-1 h-8 w-8 text-indigo-600 hover:bg-indigo-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(videoUrl, "_blank");
+                      }}
+                    >
+                      <Video size={18} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent className="bg-gray-500 text-white font-normal">
+                    Watch Recording
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="text-gray-300">-</span>
+            )}
+          </div>
+        );
       },
     },
     {
