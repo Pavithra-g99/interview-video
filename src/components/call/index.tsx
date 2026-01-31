@@ -86,6 +86,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
 
+  // Fix: Essential logic to display the camera feed in the preview box
   useEffect(() => {
     if (videoPreviewRef.current && videoStream) {
       videoPreviewRef.current.srcObject = videoStream;
@@ -103,12 +104,9 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
         toast.success("Thank you for your feedback!");
         setIsFeedbackSubmitted(true);
         setIsDialogOpen(false);
-      } else {
-        toast.error("Failed to submit feedback. Please try again.");
       }
     } catch (error) {
       console.error("Error submitting feedback:", error);
-      toast.error("An error occurred. Please try again later.");
     }
   };
 
@@ -132,9 +130,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
       setIsEnded(true);
     }
 
-    return () => {
-      clearInterval(intervalId);
-    };
+    return () => clearInterval(intervalId);
   }, [isCalling, time, currentTimeDuration, interviewTimeDuration]);
 
   useEffect(() => {
@@ -146,7 +142,6 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      // Fixed: Removed webClient.getCallId() and used state callId to avoid SDK error
       if (callId) {
         onStartRecording(callId);
       }
@@ -158,15 +153,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
       onStopRecording();
     });
 
-    webClient.on("agent_start_talking", () => {
-      setActiveTurn("agent");
-    });
-    webClient.on("agent_stop_talking", () => {
-      setActiveTurn("user");
-    });
+    webClient.on("agent_start_talking", () => setActiveTurn("agent"));
+    webClient.on("agent_stop_talking", () => setActiveTurn("user"));
 
     webClient.on("error", (error) => {
-      console.error("An error occurred:", error);
+      console.error("Call error:", error);
       webClient.stopCall();
       setIsEnded(true);
       setIsCalling(false);
@@ -303,7 +294,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 )}
                 <div className="text-sm font-normal mb-4 whitespace-pre-line text-center">
                   {interview?.description}
-                  <p className="font-bold mt-2">Ensure your volume is up and grant camera/microphone access. Tab switching is recorded.</p>
+                  <p className="font-bold mt-2">Grant camera/microphone access. Tab switching is recorded.</p>
                 </div>
                 {!interview?.is_anonymous && (
                   <div className="flex flex-col gap-3">
@@ -311,17 +302,13 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
                       placeholder="Email address"
                       value={email}
-                      onChange={(e) => {
-                        setEmail(e.target.value);
-                      }}
+                      onChange={(e) => setEmail(e.target.value)}
                     />
                     <input
                       className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm font-normal"
                       placeholder="First name"
                       value={name}
-                      onChange={(e) => {
-                        setName(e.target.value);
-                      }}
+                      onChange={(e) => setName(e.target.value)}
                     />
                   </div>
                 )}
@@ -398,7 +385,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                   <AlertDialogContent>
                     <AlertDialogHeader>
                       <AlertDialogTitle>End interview now?</AlertDialogTitle>
-                      <AlertDialogDescription>Your progress will be saved and the call will disconnect.</AlertDialogDescription>
+                      <AlertDialogDescription>Your progress will be saved.</AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -413,15 +400,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
               <div className="flex flex-col items-center justify-center grow text-center px-10">
                 <CheckCircleIcon className="h-16 w-16 text-green-500 mb-6" />
                 <h2 className="text-2xl font-bold mb-2">Interview Completed</h2>
-                <p className="text-slate-500 mb-8">
-                  {isOldUser ? "You have already responded or are not eligible." : "Thank you for participating! Your response has been recorded."}
-                </p>
+                <p className="text-slate-500 mb-8">Response has been recorded.</p>
                 {!isFeedbackSubmitted && !isOldUser && (
                    <Button 
                     className="bg-indigo-600" 
-                    onClick={() => {
-                      setIsDialogOpen(true);
-                    }}
+                    onClick={() => setIsDialogOpen(true)}
                    >
                     Provide Feedback
                    </Button>
@@ -435,20 +418,6 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
             )}
           </div>
         </Card>
-        <a
-          className="flex flex-row justify-center align-middle mt-3"
-          href="https://folo-up.co/"
-          rel="noopener noreferrer"
-          target="_blank"
-        >
-          <div className="text-center text-md font-semibold mr-2 ">
-            Powered by{" "}
-            <span className="font-bold">
-              Folo<span className="text-indigo-600">Up</span>
-            </span>
-          </div>
-          <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500 " />
-        </a>
       </div>
     </div>
   );
