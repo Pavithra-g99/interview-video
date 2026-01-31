@@ -10,6 +10,7 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
+// Standard Props for Next.js 14
 type Props = {
   params: {
     interviewId: string;
@@ -83,7 +84,7 @@ function PopUpMessage({ title, description, image }: PopupProps) {
 }
 
 function InterviewInterface({ params }: Props) {
-  const { interviewId } = params;
+  const { interviewId } = params; // No React.use() needed for Next.js 14
   const supabase = createClientComponentClient();
   
   const [interview, setInterview] = useState<Interview>();
@@ -141,6 +142,8 @@ function InterviewInterface({ params }: Props) {
 
   const startVideoRecording = (stream: MediaStream, currentCallId: string) => {
     chunksRef.current = [];
+    
+    // Select compatible mime type
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') 
       ? 'video/webm;codecs=vp8,opus' 
       : 'video/webm';
@@ -154,38 +157,45 @@ function InterviewInterface({ params }: Props) {
     };
 
     recorder.onstop = async () => {
-      if (chunksRef.current.length === 0) return;
+      if (chunksRef.current.length === 0) {
+        console.error("No data captured for recording.");
+        return;
+      }
 
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${currentCallId}-${Date.now()}.webm`;
 
+      // 1. Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('interview-videos')
         .upload(fileName, blob);
 
       if (uploadError) {
-        console.error("Upload error:", uploadError.message);
+        console.error("Storage upload error:", uploadError.message);
         return;
       }
 
       if (uploadData) {
+        // 2. Generate and Retrieve the Public URL
         const { data: { publicUrl } } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
 
+        // 3. Update Database with the URL
         try {
           await axios.post('/api/save-video-url', { 
             call_id: currentCallId, 
             videoUrl: publicUrl 
           });
         } catch (dbErr) {
-          console.error("Database link error:", dbErr);
+          console.error("Failed to link video URL to database:", dbErr);
         }
       }
       chunksRef.current = [];
     };
 
-    recorder.start(1000); // Critical: Capture data chunks every 1 second
+    // Use 1-second timeslices to ensure data is captured
+    recorder.start(1000); 
     mediaRecorderRef.current = recorder;
   };
 
@@ -205,7 +215,7 @@ function InterviewInterface({ params }: Props) {
           interviewNotFound ? (
             <PopUpMessage
               title="Invalid URL"
-              description="The interview link is invalid."
+              description="The interview link you're trying to access is invalid."
               image="/invalid-url.png"
             />
           ) : (
@@ -225,11 +235,14 @@ function InterviewInterface({ params }: Props) {
               <Video size={60} className="text-indigo-600 mb-4" />
             )}
             <h2 className="text-2xl font-bold mb-2">Camera Access Required</h2>
+            <p className="text-gray-600 mb-8 max-w-md text-center">
+              Grant camera and microphone access to proceed with the recording.
+            </p>
             <button 
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold mt-4"
+              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all"
               onClick={requestPermissions}
             >
-              Enable Camera & Mic
+              {permissionError ? "Try Again" : "Enable Camera & Mic"}
             </button>
           </div>
         ) : (
@@ -240,6 +253,13 @@ function InterviewInterface({ params }: Props) {
             onStopRecording={stopVideoRecording}
           />
         )}
+      </div>
+
+      <div className=" md:hidden flex flex-col items-center justify-center my-auto">
+        <div className="mt-48 px-3 text-center">
+          <p className="text-md font-semibold mb-5">{interview?.name}</p>
+          <p className="text-gray-600">Please use a PC to respond to the interview.</p>
+        </div>
       </div>
     </div>
   );
