@@ -24,14 +24,13 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 
-// UPDATED: Included video_url in the type definition
 export type TableData = {
   call_id: string;
   name: string;
   overallScore: number;
   communicationScore: number;
   callSummary: string;
-  video_url?: string; 
+  video_url?: string;
 };
 
 interface DataTableProps {
@@ -80,7 +79,9 @@ function DataTable({ data, interviewId }: DataTableProps) {
         return (
           <Button
             variant="ghost"
-            className={`w-full justify-start font-semibold text-[15px] mb-1 ${column.getIsSorted() ? "text-indigo-600" : "text-black"}`}
+            className={`w-full justify-start font-semibold text-[15px] mb-1 ${
+              column.getIsSorted() ? "text-indigo-600" : "text-black"
+            }`}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Name
@@ -101,7 +102,7 @@ function DataTable({ data, interviewId }: DataTableProps) {
                       e.stopPropagation();
                       window.open(
                         `/interviews/${interviewId}?call=${row.original.call_id}`,
-                        "_blank",
+                        "_blank"
                       );
                     }}
                   />
@@ -131,7 +132,9 @@ function DataTable({ data, interviewId }: DataTableProps) {
         return (
           <Button
             variant="ghost"
-            className={`w-full justify-start font-semibold text-[15px] mb-1 ${column.getIsSorted() ? "text-indigo-600" : "text-black"}`}
+            className={`w-full justify-start font-semibold text-[15px] mb-1 ${
+              column.getIsSorted() ? "text-indigo-600" : "text-black"
+            }`}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Overall Score
@@ -157,7 +160,9 @@ function DataTable({ data, interviewId }: DataTableProps) {
         return (
           <Button
             variant="ghost"
-            className={`w-full justify-start font-semibold text-[15px] mb-1 ${column.getIsSorted() ? "text-indigo-600" : "text-black"}`}
+            className={`w-full justify-start font-semibold text-[15px] mb-1 ${
+              column.getIsSorted() ? "text-indigo-600" : "text-black"
+            }`}
             onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
           >
             Communication Score
@@ -177,7 +182,6 @@ function DataTable({ data, interviewId }: DataTableProps) {
         return customSortingFn(a, b);
       },
     },
-    // NEW: Added Video Recording column
     {
       accessorKey: "video_url",
       header: () => (
@@ -270,7 +274,7 @@ function DataTable({ data, interviewId }: DataTableProps) {
                     ? null
                     : flexRender(
                         header.column.columnDef.header,
-                        header.getContext(),
+                        header.getContext()
                       )}
                 </TableHead>
               ))}
