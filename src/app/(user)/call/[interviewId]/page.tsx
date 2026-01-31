@@ -140,10 +140,11 @@ function InterviewInterface({ params }: Props) {
   };
 
   const startVideoRecording = (stream: MediaStream, currentCallId: string) => {
-    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    // Collect data every 1 second to ensure chunks are captured
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8,opus' });
     
     recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
+      if (e.data && e.data.size > 0) {
         chunksRef.current.push(e.data);
       }
     };
@@ -152,29 +153,34 @@ function InterviewInterface({ params }: Props) {
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${currentCallId}-${Date.now()}.webm`;
 
-      const { data } = await supabase.storage
+      const { data, error } = await supabase.storage
         .from('interview-videos')
         .upload(fileName, blob);
 
+      if (error) {
+        console.error("Storage upload failed:", error.message);
+        return;
+      }
+
       if (data) {
-        // Generating the Public URL after successful upload
-        const { data: urlData } = supabase.storage
+        // Retrieve and save the Public URL
+        const { data: { publicUrl } } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
 
         try {
           await axios.post('/api/save-video-url', { 
             call_id: currentCallId, 
-            videoUrl: urlData.publicUrl 
+            videoUrl: publicUrl 
           });
         } catch (dbErr) {
-          console.error("Failed to link video URL to database:", dbErr);
+          console.error("Failed to update database with video link:", dbErr);
         }
       }
       chunksRef.current = [];
     };
 
-    recorder.start();
+    recorder.start(1000); 
     mediaRecorderRef.current = recorder;
   };
 
@@ -183,9 +189,7 @@ function InterviewInterface({ params }: Props) {
       mediaRecorderRef.current.stop();
     }
     if (mediaStream) {
-      mediaStream.getTracks().forEach((track) => {
-        track.stop();
-      });
+      mediaStream.getTracks().forEach((track) => track.stop());
     }
   };
 
@@ -196,7 +200,7 @@ function InterviewInterface({ params }: Props) {
           interviewNotFound ? (
             <PopUpMessage
               title="Invalid URL"
-              description="The interview link you're trying to access is invalid. Please check the URL and try again."
+              description="The interview link you're trying to access is invalid."
               image="/invalid-url.png"
             />
           ) : (
@@ -205,7 +209,7 @@ function InterviewInterface({ params }: Props) {
         ) : !isActive ? (
           <PopUpMessage
             title="Interview Is Unavailable"
-            description="We are not currently accepting responses. Please contact the sender for more information."
+            description="We are not currently accepting responses."
             image="/closed.png"
           />
         ) : !mediaStream ? (
@@ -218,11 +222,11 @@ function InterviewInterface({ params }: Props) {
             <h2 className="text-2xl font-bold mb-2">Camera Access Required</h2>
             <p className="text-gray-600 mb-8 max-w-md text-center">
               {permissionError 
-                ? "Permissions were denied. Please enable camera and microphone access in your browser settings to continue."
-                : "To ensure a smooth interview process, we require access to your camera and microphone for recording."}
+                ? "Please enable camera/microphone access in your browser settings."
+                : "We require access to your camera and microphone for recording."}
             </p>
             <button 
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700 transition-all"
+              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold hover:bg-indigo-700"
               onClick={requestPermissions}
             >
               {permissionError ? "Try Again" : "Enable Camera & Mic"}
@@ -240,24 +244,8 @@ function InterviewInterface({ params }: Props) {
 
       <div className=" md:hidden flex flex-col items-center justify-center my-auto">
         <div className="mt-48 px-3">
-          <p className="text-center my-5 text-md font-semibold">
-            {interview?.name}
-          </p>
-          <p className="text-center text-gray-600 my-5">
-            Please use a PC to respond to the interview. Apologies for any
-            inconvenience caused.{" "}
-          </p>
-        </div>
-        <div className="text-center text-md font-semibold mr-2 my-5">
-          Powered by{" "}
-          <a
-            className="font-bold underline"
-            href="https://folo-up.co"
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            Folo<span className="text-indigo-600">Up</span>
-          </a>
+          <p className="text-center my-5 text-md font-semibold">{interview?.name}</p>
+          <p className="text-center text-gray-600 my-5">Please use a PC to respond.</p>
         </div>
       </div>
     </div>
