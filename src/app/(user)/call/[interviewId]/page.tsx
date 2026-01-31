@@ -141,8 +141,6 @@ function InterviewInterface({ params }: Props) {
 
   const startVideoRecording = (stream: MediaStream, currentCallId: string) => {
     chunksRef.current = [];
-    
-    // Choose compatible mime type
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') 
       ? 'video/webm;codecs=vp8,opus' 
       : 'video/webm';
@@ -171,7 +169,6 @@ function InterviewInterface({ params }: Props) {
       }
 
       if (uploadData) {
-        // Retrieve and save the Public URL
         const { data: { publicUrl } } = supabase.storage
           .from('interview-videos')
           .getPublicUrl(fileName);
@@ -182,14 +179,13 @@ function InterviewInterface({ params }: Props) {
             videoUrl: publicUrl 
           });
         } catch (dbErr) {
-          console.error("Failed to link video URL to database:", dbErr);
+          console.error("Database link error:", dbErr);
         }
       }
       chunksRef.current = [];
     };
 
-    // Use 1-second timeslices to ensure data is captured
-    recorder.start(1000); 
+    recorder.start(1000); // Critical: Capture data chunks every 1 second
     mediaRecorderRef.current = recorder;
   };
 
@@ -209,7 +205,7 @@ function InterviewInterface({ params }: Props) {
           interviewNotFound ? (
             <PopUpMessage
               title="Invalid URL"
-              description="The interview link you're trying to access is invalid."
+              description="The interview link is invalid."
               image="/invalid-url.png"
             />
           ) : (
@@ -229,16 +225,11 @@ function InterviewInterface({ params }: Props) {
               <Video size={60} className="text-indigo-600 mb-4" />
             )}
             <h2 className="text-2xl font-bold mb-2">Camera Access Required</h2>
-            <p className="text-gray-600 mb-8 max-w-md text-center">
-              {permissionError 
-                ? "Please enable camera access in your settings."
-                : "Camera access is required for the recording."}
-            </p>
             <button 
-              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold"
+              className="bg-indigo-600 text-white px-8 py-3 rounded-lg font-semibold mt-4"
               onClick={requestPermissions}
             >
-              {permissionError ? "Try Again" : "Enable Camera & Mic"}
+              Enable Camera & Mic
             </button>
           </div>
         ) : (
@@ -249,13 +240,6 @@ function InterviewInterface({ params }: Props) {
             onStopRecording={stopVideoRecording}
           />
         )}
-      </div>
-
-      <div className=" md:hidden flex flex-col items-center justify-center my-auto">
-        <div className="mt-48 px-3 text-center">
-           <p className="font-semibold">{interview?.name}</p>
-           <p className="text-gray-600">Please use a PC to respond.</p>
-        </div>
       </div>
     </div>
   );
