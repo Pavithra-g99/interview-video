@@ -18,13 +18,12 @@ function InterviewInterface({ params }: Props) {
 
   const [interview, setInterview] = useState<Interview>();
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [isReadyToStart, setIsReadyToStart] = useState(false);
+  const [isVerified, setIsVerified] = useState(false); // New state for hardware check
   const [permissionError, setPermissionError] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Fetch Interview Data
   useEffect(() => {
     const fetchInterview = async () => {
       const response = await getInterviewById(interviewId);
@@ -33,7 +32,6 @@ function InterviewInterface({ params }: Props) {
     fetchInterview();
   }, [interviewId, getInterviewById]);
 
-  // Request Permissions for Pre-Check
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -43,7 +41,6 @@ function InterviewInterface({ params }: Props) {
       setMediaStream(stream);
       setPermissionError(false);
     } catch (err) {
-      console.error("Hardware access denied", err);
       setPermissionError(true);
     }
   };
@@ -51,46 +48,37 @@ function InterviewInterface({ params }: Props) {
   const startVideoRecording = (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-    
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
     recorder.onstop = async () => {
       if (chunksRef.current.length === 0) return;
       const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       const fileName = `interview-${callId}-${Date.now()}.webm`;
-
       const { data } = await supabase.storage.from('interview-videos').upload(fileName, blob);
       if (data) {
         const { data: { publicUrl } } = supabase.storage.from('interview-videos').getPublicUrl(fileName);
         await axios.post('/api/save-video-url', { call_id: callId, videoUrl: publicUrl });
       }
     };
-
-    recorder.start(1000); // Capture data chunks every second
+    recorder.start(1000); 
     mediaRecorderRef.current = recorder;
   };
 
   const stopVideoRecording = () => {
     if (mediaRecorderRef.current?.state !== "inactive") mediaRecorderRef.current?.stop();
-    mediaStream?.getTracks().forEach(track => track.stop());
   };
-
-  // --- UI SCREENS ---
 
   if (!interview) return <LoaderWithText />;
 
-  // SCREEN 1: Hardware Connection Test
-  if (!isReadyToStart) {
+  // PHASE 1: Hardware verification
+  if (!isVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-2 border-indigo-100">
           <ShieldCheck className="mx-auto h-16 w-16 text-indigo-600 mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Ready for your interview?</h1>
-          <p className="text-gray-500 mb-8">We need to verify your camera and microphone are working correctly before we begin.</p>
+          <h1 className="text-2xl font-bold mb-2">Pre-Interview Check</h1>
+          <p className="text-gray-500 mb-6 text-sm">Please verify your camera is working correctly.</p>
           
-          <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden mb-6 border-4 border-slate-200 shadow-inner">
+          <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden mb-6 border-4 border-slate-200">
             {mediaStream ? (
               <video 
                 autoPlay 
@@ -102,18 +90,18 @@ function InterviewInterface({ params }: Props) {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-white">
                 {permissionError ? <VideoOff size={48} className="text-red-400 mb-2" /> : <Video size={48} className="opacity-20 mb-2" />}
-                <p className="text-xs opacity-60 px-8">{permissionError ? "Access Denied. Check browser settings." : "Camera Preview"}</p>
+                <p className="text-xs opacity-60">{permissionError ? "Access Denied" : "Camera Preview"}</p>
               </div>
             )}
           </div>
 
           {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all flex items-center justify-center gap-2">
+            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
               Enable Camera & Mic
             </button>
           ) : (
-            <button onClick={() => setIsReadyToStart(true)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2">
-              Looks Good, Start <CheckCircle size={20} />
+            <button onClick={() => setIsVerified(true)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
+              Hardware Verified <CheckCircle size={20} />
             </button>
           )}
         </div>
@@ -121,7 +109,7 @@ function InterviewInterface({ params }: Props) {
     );
   }
 
-  // SCREEN 2: The actual Call logic
+  // PHASE 2: Login Screen and then the Interview
   return (
     <Call 
       interview={interview} 
