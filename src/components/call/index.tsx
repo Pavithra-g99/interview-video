@@ -146,7 +146,7 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
   useEffect(() => {
     webClient.on("call_started", () => {
       setIsCalling(true);
-      // Fixed: Using callId state as requested to avoid SDK property errors
+      // Fixed: Removed webClient.getCallId() and used state callId to avoid SDK error
       if (callId) {
         onStartRecording(callId);
       }
@@ -328,11 +328,11 @@ function Call({ interview, videoStream, onStartRecording, onStopRecording }: Int
                 <div className="flex flex-row gap-2 mt-6 justify-center">
                   <Button
                     className="h-10 px-6 rounded-lg"
-                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     style={{
                       backgroundColor: interview.theme_color ?? "#4F46E5",
                       color: isLightColor(interview.theme_color ?? "#4F46E5") ? "black" : "white",
                     }}
+                    disabled={Loading || (!interview?.is_anonymous && (!isValidEmail || !name))}
                     onClick={startConversation}
                   >
                     {!Loading ? "Start Interview" : <MiniLoader />}
