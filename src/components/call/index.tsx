@@ -37,14 +37,21 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { InterviewerService } from "@/services/interviewers.service";
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 
 const webClient = new RetellWebClient();
 
 type InterviewProps = {
   interview: Interview;
-  videoStream: MediaStream | null;
-  onStartRecording: (callId: string) => void;
-  onStopRecording: () => void;
+};
+
+type registerCallResponseType = {
+  data: {
+    registerCallResponse: {
+      call_id: string;
+      access_token: string;
+    };
+  };
 };
 
 type transcriptType = {
@@ -52,285 +59,241 @@ type transcriptType = {
   content: string;
 };
 
-function Call({ interview, videoStream, onStartRecording, onStopRecording }: InterviewProps) {
+function Call({ interview }: InterviewProps) {
+  const supabase = createClientComponentClient();
   const { createResponse } = useResponses();
-  const [lastInterviewerResponse, setLastInterviewerResponse] = useState<string>("");
-  const [lastUserResponse, setLastUserResponse] = useState<string>("");
-  const [activeTurn, setActiveTurn] = useState<string>("");
-  const [Loading, setLoading] = useState(false);
+  const { tabSwitchCount } = useTabSwitchPrevention();
+
   const [isStarted, setIsStarted] = useState(false);
   const [isEnded, setIsEnded] = useState(false);
   const [isCalling, setIsCalling] = useState(false);
-  const [email, setEmail] = useState<string>("");
-  const [name, setName] = useState<string>("");
-  const [isValidEmail, setIsValidEmail] = useState<boolean>(false);
-  const [isOldUser, setIsOldUser] = useState<boolean>(false);
-  const [callId, setCallId] = useState<string>("");
-  const { tabSwitchCount } = useTabSwitchPrevention();
-  const [isFeedbackSubmitted, setIsFeedbackSubmitted] = useState(false);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [Loading, setLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [isValidEmail, setIsValidEmail] = useState(false);
+  const [isOldUser, setIsOldUser] = useState(false);
+  const [callId, setCallId] = useState("");
+  const [lastInterviewerResponse, setLastInterviewerResponse] = useState("");
+  const [lastUserResponse, setLastUserResponse] = useState("");
+  const [activeTurn, setActiveTurn] = useState("");
   const [interviewerImg, setInterviewerImg] = useState("");
-  const [interviewTimeDuration, setInterviewTimeDuration] = useState<string>("1");
+  const [interviewTimeDuration, setInterviewTimeDuration] = useState("1");
   const [time, setTime] = useState(0);
-  const [currentTimeDuration, setCurrentTimeDuration] = useState<string>("0");
+  const [currentTimeDuration, setCurrentTimeDuration] = useState("0");
 
-  const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
+  /* ================= VIDEO RECORDING STATE ================= */
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const videoChunksRef = useRef<Blob[]>([]);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
 
-  // Fix: Force playback on metadata load to prevent black screen
-  useEffect(() => {
-    if (videoPreviewRef.current && videoStream) {
-      videoPreviewRef.current.srcObject = videoStream;
+  /* ================= CAMERA + RECORDING ================= */
+  const startCameraAndRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    });
+
+    setVideoStream(stream);
+
+    if (videoPreviewRef.current) {
+      videoPreviewRef.current.srcObject = stream;
+      videoPreviewRef.current.muted = true;
+      videoPreviewRef.current.play();
     }
-  }, [videoStream]);
 
-  const handleFeedbackSubmit = async (formData: Omit<FeedbackData, "interview_id">) => {
-    try {
-      const result = await FeedbackService.submitFeedback({
-        ...formData,
-        interview_id: interview.id,
-      });
-
-      if (result) {
-        toast.success("Thank you for your feedback!");
-        setIsFeedbackSubmitted(true);
-        setIsDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error submitting feedback:", error);
-    }
+    startVideoRecording(stream);
   };
 
-  useEffect(() => {
-    if (lastUserResponseRef.current) {
-      lastUserResponseRef.current.scrollTop = lastUserResponseRef.current.scrollHeight;
-    }
-  }, [lastUserResponse]);
+  const startVideoRecording = (stream: MediaStream) => {
+    videoChunksRef.current = [];
 
-  useEffect(() => {
-    let intervalId: any;
-    if (isCalling) {
-      intervalId = setInterval(() => setTime((prev) => prev + 1), 10);
-    }
-    setCurrentTimeDuration(String(Math.floor(time / 100)));
-    if (Number(currentTimeDuration) === Number(interviewTimeDuration) * 60) {
-      webClient.stopCall();
-      setIsEnded(true);
-    }
-    return () => clearInterval(intervalId);
-  }, [isCalling, time, currentTimeDuration, interviewTimeDuration]);
+    const recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
 
-  useEffect(() => {
-    if (testEmail(email)) setIsValidEmail(true);
-  }, [email]);
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) videoChunksRef.current.push(e.data);
+    };
 
+    recorder.onstop = async () => {
+      const blob = new Blob(videoChunksRef.current, {
+        type: "video/webm",
+      });
+
+      if (blob.size > 0) await uploadVideo(blob);
+    };
+
+    recorder.start();
+    mediaRecorderRef.current = recorder;
+  };
+
+  const stopVideoRecording = () => {
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
+    videoStream?.getTracks().forEach((t) => t.stop());
+  };
+
+  const uploadVideo = async (blob: Blob) => {
+    const filePath = `videos/${callId}-${Date.now()}.webm`;
+
+    const { error } = await supabase.storage
+      .from("interview-videos")
+      .upload(filePath, blob);
+
+    if (error) {
+      console.error("Video upload failed:", error);
+      return;
+    }
+
+    const { data } = supabase.storage
+      .from("interview-videos")
+      .getPublicUrl(filePath);
+
+    await fetch("/api/save-video-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        call_id: callId,
+        videoUrl: data.publicUrl,
+      }),
+    });
+  };
+
+  /* ================= RETELL EVENTS ================= */
   useEffect(() => {
-    webClient.on("call_started", () => {
+    webClient.on("call_started", async () => {
       setIsCalling(true);
-      if (callId) onStartRecording(callId);
+      await startCameraAndRecording();
     });
 
     webClient.on("call_ended", () => {
       setIsCalling(false);
       setIsEnded(true);
-      onStopRecording();
+      stopVideoRecording();
     });
 
     webClient.on("agent_start_talking", () => setActiveTurn("agent"));
     webClient.on("agent_stop_talking", () => setActiveTurn("user"));
 
-    webClient.on("error", (error) => {
-      console.error("Call error:", error);
-      webClient.stopCall();
-      setIsEnded(true);
-      setIsCalling(false);
-      onStopRecording();
-    });
-
     webClient.on("update", (update) => {
       if (update.transcript) {
         const transcripts: transcriptType[] = update.transcript;
-        const roleContents: { [key: string]: string } = {};
-        transcripts.forEach((transcript) => {
-          roleContents[transcript?.role] = transcript?.content;
+        transcripts.forEach((t) => {
+          if (t.role === "agent") setLastInterviewerResponse(t.content);
+          if (t.role === "user") setLastUserResponse(t.content);
         });
-        setLastInterviewerResponse(roleContents.agent);
-        setLastUserResponse(roleContents.user);
       }
     });
 
-    return () => {
-      webClient.removeAllListeners();
-    };
-  }, [onStartRecording, onStopRecording, callId]);
+    return () => webClient.removeAllListeners();
+  }, [callId]);
 
-  const onEndCallClick = async () => {
-    if (isStarted) {
-      setLoading(true);
-      webClient.stopCall();
-      setIsEnded(true);
-      setLoading(false);
-      onStopRecording();
-    } else {
-      setIsEnded(true);
-    }
-  };
-
+  /* ================= START INTERVIEW ================= */
   const startConversation = async () => {
-    const data = {
-      mins: interview?.time_duration,
-      objective: interview?.objective,
-      questions: interview?.questions.map((q) => q.question).join(", "),
-      name: name || "not provided",
-    };
     setLoading(true);
 
     try {
-      const oldUserEmails: string[] = (await ResponseService.getAllEmails(interview.id)).map((item) => item.email);
-      const OldUser = oldUserEmails.includes(email) || (interview?.respondents && !interview?.respondents.includes(email));
-
-      if (OldUser) {
-        setIsOldUser(true);
-      } else {
-        const registerCallResponse = await axios.post(
-          "/api/register-call",
-          { dynamic_data: data, interviewer_id: interview?.interviewer_id },
-        );
-        if (registerCallResponse.data.registerCallResponse.access_token) {
-          await webClient.startCall({
-            accessToken: registerCallResponse.data.registerCallResponse.access_token,
-          });
-          setIsCalling(true);
-          setIsStarted(true);
-          setCallId(registerCallResponse?.data?.registerCallResponse?.call_id);
-
-          await createResponse({
-            interview_id: interview.id,
-            call_id: registerCallResponse.data.registerCallResponse.call_id,
-            email: email,
-            name: name,
-          });
+      const registerCallResponse: registerCallResponseType = await axios.post(
+        "/api/register-call",
+        {
+          dynamic_data: {
+            mins: interview.time_duration,
+            objective: interview.objective,
+            questions: interview.questions.map((q) => q.question).join(", "),
+            name,
+          },
+          interviewer_id: interview.interviewer_id,
         }
-      }
-    } catch (error) {
-      console.error("Start error:", error);
+      );
+
+      const { call_id, access_token } =
+        registerCallResponse.data.registerCallResponse;
+
+      setCallId(call_id);
+
+      await webClient.startCall({ accessToken: access_token });
+
+      await createResponse({
+        interview_id: interview.id,
+        call_id,
+        email,
+        name,
+      });
+
+      setIsStarted(true);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (interview?.time_duration) setInterviewTimeDuration(interview?.time_duration);
-  }, [interview]);
-
-  useEffect(() => {
-    const fetchInterviewer = async () => {
-      const interviewer = await InterviewerService.getInterviewer(interview.interviewer_id);
-      setInterviewerImg(interviewer.image);
-    };
-    fetchInterviewer();
-  }, [interview.interviewer_id]);
-
-  useEffect(() => {
-    if (isEnded && callId) {
-      const updateInterview = async () => {
-        await ResponseService.saveResponse({ is_ended: true, tab_switch_count: tabSwitchCount }, callId);
-      };
-      updateInterview();
-    }
-  }, [isEnded, callId, tabSwitchCount]);
-
+  /* ================= UI ================= */
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100">
       {isStarted && <TabSwitchWarning />}
-      <div className="bg-white rounded-md md:w-[80%] w-[90%]">
-        <Card className="h-[88vh] rounded-lg border-2 border-b-4 border-r-4 border-black text-xl font-bold transition-all md:block dark:border-white">
-          <div className="flex flex-col h-full">
-            {/* Header and Progress section remains the same */}
-            <div className="m-4 h-[15px] rounded-lg border-[1px] border-black overflow-hidden">
-              <div
-                className="bg-indigo-600 h-[15px] transition-all duration-300"
-                style={{
-                  width: isEnded
-                    ? "100%"
-                    : `${(Number(currentTimeDuration) / (Number(interviewTimeDuration) * 60)) * 100}%`,
-                }}
+
+      <Card className="md:w-[80%] w-[95%] h-[88vh]">
+        {!isStarted && !isEnded && (
+          <div className="p-6 text-center">
+            <h2 className="text-xl font-bold mb-4">{interview.name}</h2>
+            <input
+              placeholder="Email"
+              className="border p-2 w-full mb-2"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              placeholder="Name"
+              className="border p-2 w-full mb-4"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <Button onClick={startConversation} disabled={Loading}>
+              {Loading ? <MiniLoader /> : "Start Interview"}
+            </Button>
+          </div>
+        )}
+
+        {isStarted && !isEnded && (
+          <div className="flex h-full">
+            <div className="w-1/2 flex flex-col items-center justify-center">
+              <p className="italic text-lg mb-6">
+                {lastInterviewerResponse || "Listening..."}
+              </p>
+              <Image
+                src={interviewerImg || "/ai-avatar.png"}
+                alt="AI"
+                width={140}
+                height={140}
+                className="rounded-full"
               />
             </div>
-            
-            {!isStarted && !isEnded && !isOldUser && (
-              <div className="w-fit min-w-[400px] max-w-[400px] mx-auto mt-2 border border-indigo-200 rounded-md p-4 bg-slate-50 text-center">
-                <p className="text-sm mb-4">Grant camera access. Tab switching is recorded.</p>
-                <div className="flex flex-col gap-3">
-                  <input
-                    className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm"
-                    placeholder="Email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                  />
-                  <input
-                    className="py-2 border-2 rounded-md w-full px-2 border-gray-400 text-sm"
-                    placeholder="First name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
-                <Button 
-                  className="h-10 px-6 rounded-lg mt-6"
-                  style={{ backgroundColor: interview.theme_color ?? "#4F46E5" }}
-                  disabled={Loading || (!isValidEmail || !name)}
-                  onClick={startConversation}
-                >
-                  {!Loading ? "Start Interview" : <MiniLoader />}
-                </Button>
-              </div>
-            )}
 
-            {isStarted && !isEnded && !isOldUser && (
-              <div className="flex flex-row p-2 grow h-[60vh]">
-                <div className="border-r-2 border-slate-100 w-[50%] flex flex-col items-center justify-center p-4">
-                  <div className="text-lg italic text-slate-700 mb-8">&quot;{lastInterviewerResponse || "Connecting..."}&quot;</div>
-                  <Image alt="AI" height={140} width={140} className="rounded-full object-cover" src={interviewerImg || "/ai-avatar.png"} />
-                </div>
-
-                <div className="w-[50%] flex flex-col items-center justify-center p-4">
-                  <div className="text-lg text-indigo-600 mb-8">{lastUserResponse || "Listening..."}</div>
-                  <div className="relative w-[280px] h-[180px] bg-slate-900 rounded-2xl overflow-hidden border-4 border-slate-200">
-                    {videoStream ? (
-                      <video
-                        ref={videoPreviewRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        className="w-full h-full object-cover mirror"
-                        style={{ transform: "scaleX(-1)" }}
-                        onLoadedMetadata={(e) => e.currentTarget.play()} // Critical fix for black screen
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-white text-xs">Offline</div>
-                    )}
-                    <div className="absolute bottom-2 left-2 bg-indigo-600/80 text-[10px] text-white px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" /> REC
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {/* End calls and Feedback sections remain the same */}
-            {(isEnded || isOldUser) && (
-              <div className="flex flex-col items-center justify-center grow text-center px-10">
-                <CheckCircleIcon className="h-16 w-16 text-green-500 mb-6" />
-                <h2 className="text-2xl font-bold mb-2">Interview Completed</h2>
-                <Button className="bg-indigo-600 mt-8" onClick={() => setIsDialogOpen(true)}>Provide Feedback</Button>
-                <AlertDialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                  <AlertDialogContent><FeedbackForm email={email} onSubmit={handleFeedbackSubmit} /></AlertDialogContent>
-                </AlertDialog>
-              </div>
-            )}
+            <div className="w-1/2 flex flex-col items-center justify-center">
+              <video
+                ref={videoPreviewRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-72 h-48 rounded-lg border bg-black"
+                style={{ transform: "scaleX(-1)" }}
+              />
+              <p className="mt-2 text-xs uppercase">Recording</p>
+            </div>
           </div>
-        </Card>
-      </div>
+        )}
+
+        {isEnded && (
+          <div className="flex flex-col items-center justify-center h-full">
+            <CheckCircleIcon className="h-16 w-16 text-green-500 mb-4" />
+            <h2 className="text-xl font-bold">Interview Completed</h2>
+            <p className="text-gray-500">
+              Audio & video successfully recorded.
+            </p>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
