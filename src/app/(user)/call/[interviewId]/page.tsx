@@ -18,7 +18,7 @@ function InterviewInterface({ params }: Props) {
 
   const [interview, setInterview] = useState<Interview>();
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [isVerified, setIsVerified] = useState(false); // New state for hardware check
+  const [isVerified, setIsVerified] = useState(false);
   const [permissionError, setPermissionError] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -69,14 +69,13 @@ function InterviewInterface({ params }: Props) {
 
   if (!interview) return <LoaderWithText />;
 
-  // PHASE 1: Hardware verification
   if (!isVerified) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-2 border-indigo-100">
           <ShieldCheck className="mx-auto h-16 w-16 text-indigo-600 mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Pre-Interview Check</h1>
-          <p className="text-gray-500 mb-6 text-sm">Please verify your camera is working correctly.</p>
+          <h1 className="text-2xl font-bold mb-2">Ready for your interview?</h1>
+          <p className="text-gray-500 mb-6">We need to verify your camera and microphone working correctly before we begin.</p>
           
           <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden mb-6 border-4 border-slate-200">
             {mediaStream ? (
@@ -90,18 +89,18 @@ function InterviewInterface({ params }: Props) {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-white">
                 {permissionError ? <VideoOff size={48} className="text-red-400 mb-2" /> : <Video size={48} className="opacity-20 mb-2" />}
-                <p className="text-xs opacity-60">{permissionError ? "Access Denied" : "Camera Preview"}</p>
+                <p className="text-xs opacity-60 px-8 text-center">{permissionError ? "Access Denied. Please check browser settings." : "Camera Preview"}</p>
               </div>
             )}
           </div>
 
           {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold">
+            <button onClick={requestPermissions} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all">
               Enable Camera & Mic
             </button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2">
-              Hardware Verified <CheckCircle size={20} />
+            <button onClick={() => setIsVerified(true)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2">
+              Looks Good, Start <CheckCircle size={20} />
             </button>
           )}
         </div>
@@ -109,7 +108,6 @@ function InterviewInterface({ params }: Props) {
     );
   }
 
-  // PHASE 2: Login Screen and then the Interview
   return (
     <Call 
       interview={interview} 
