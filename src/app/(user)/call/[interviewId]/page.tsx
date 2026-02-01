@@ -131,12 +131,12 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * BACKGROUND AUDIO MERGER: Captures AI Agent voice and User Mic together
+   * SILENT AUDIO MERGING: This captures the AI voice directly from the DOM
    */
   const startVideoRecording = (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // Identify the specific audio element used by the AI Agent for playback
+    // Find the audio element used by Retell to play the AI voice
     const audioTags = document.getElementsByTagName("audio");
     let recordingStream = stream;
 
@@ -148,7 +148,7 @@ function InterviewInterface({ params }: Props) {
       // Capture the internal audio stream from the AI element
       const agentStream = (agentAudio as any).captureStream();
 
-      // Merge: User Video + User Mic + Agent Voice digital track
+      // Merge: Camera Video + User Mic Audio + Agent Voice Audio track
       const mergedTracks = [
         ...stream.getVideoTracks(),
         ...stream.getAudioTracks(),
