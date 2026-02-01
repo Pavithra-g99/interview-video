@@ -4,7 +4,7 @@ import { Interview } from "@/types/interview";
 import { Interviewer } from "@/types/interviewer";
 import { Response } from "@/types/response";
 import React, { useEffect, useState } from "react";
-import { UserCircleIcon, SmileIcon, Info } from "lucide-react";
+import { SmileIcon, Info } from "lucide-react";
 import { useInterviewers } from "@/contexts/interviewers.context";
 import { PieChart } from "@mui/x-charts/PieChart";
 import { CandidateStatus } from "@/lib/enum";
@@ -49,18 +49,12 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
   const [interviewer, setInterviewer] = useState<Interviewer>();
   const [totalDuration, setTotalDuration] = useState<number>(0);
   const [completedInterviews, setCompletedInterviews] = useState<number>(0);
+
   const [sentimentCount, setSentimentCount] = useState({
     positive: 0,
     negative: 0,
     neutral: 0,
   });
-  const [callCompletion, setCallCompletion] = useState({
-    complete: 0,
-    incomplete: 0,
-    partial: 0,
-  });
-
-  const totalResponses = responses.length;
 
   const [candidateStatusCount, setCandidateStatusCount] = useState({
     [CandidateStatus.NO_STATUS]: 0,
@@ -71,14 +65,18 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
 
   const [tableData, setTableData] = useState<TableData[]>([]);
 
-  // Mapping the video_url from Supabase to the table data
+  /**
+   * Prepare table data
+   * IMPORTANT: video_url is intentionally passed
+   * so DataTable can show Video icon / modal / player
+   */
   const prepareTableData = (responses: Response[]): TableData[] => {
     return responses.map((response) => ({
       call_id: response.call_id,
       name: response.name || "Anonymous",
       overallScore: response.analytics?.overallScore || 0,
       communicationScore: response.analytics?.communication?.score || 0,
-      video_url: response.video_url || "", // This allows the Video Icon to show in DataTable
+      video_url: response.video_url ?? "", // ✅ FINAL & SAFE
       callSummary:
         response.analytics?.softSkillSummary ||
         response.details?.call_analysis?.call_summary ||
@@ -87,24 +85,21 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
   };
 
   useEffect(() => {
-    if (!interviewers || !interview) {
-      return;
-    }
+    if (!interviewers || !interview) return;
+
     const interviewerObj = interviewers.find(
-      (interviewer) => interviewer.id === interview.interviewer_id
+      (i) => i.id === interview.interviewer_id
     );
     setInterviewer(interviewerObj);
   }, [interviewers, interview]);
 
   useEffect(() => {
-    if (!responses) {
-      return;
-    }
+    if (!responses || responses.length === 0) return;
 
     const sentimentCounter = { positive: 0, negative: 0, neutral: 0 };
-    const callCompletionCounter = { complete: 0, incomplete: 0, partial: 0 };
     let totalDur = 0;
     let completedCount = 0;
+
     const statusCounter = {
       [CandidateStatus.NO_STATUS]: 0,
       [CandidateStatus.NOT_SELECTED]: 0,
@@ -118,14 +113,9 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
       else if (sentiment === "Negative") sentimentCounter.negative += 1;
       else if (sentiment === "Neutral") sentimentCounter.neutral += 1;
 
-      const completion =
-        response.details?.call_analysis?.call_completion_rating;
-      if (completion === "Complete") callCompletionCounter.complete += 1;
-      else if (completion === "Incomplete") callCompletionCounter.incomplete += 1;
-      else if (completion === "Partial") callCompletionCounter.partial += 1;
-
       const agentTaskCompletion =
         response.details?.call_analysis?.agent_task_completion_rating;
+
       if (
         agentTaskCompletion === "Complete" ||
         agentTaskCompletion === "Partial"
@@ -134,6 +124,7 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
       }
 
       totalDur += response.duration;
+
       if (
         Object.values(CandidateStatus).includes(
           response.candidate_status as CandidateStatus
@@ -144,64 +135,63 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
     });
 
     setSentimentCount(sentimentCounter);
-    setCallCompletion(callCompletionCounter);
     setTotalDuration(totalDur);
     setCompletedInterviews(completedCount);
     setCandidateStatusCount(statusCounter);
-
-    const preparedData = prepareTableData(responses);
-    setTableData(preparedData);
+    setTableData(prepareTableData(responses));
   }, [responses]);
 
   return (
     <div className="h-screen z-[10] mx-2">
       {responses.length > 0 ? (
-        <div className="bg-slate-200 rounded-2xl min-h-[120px] p-2 ">
-          <div className="flex flex-row gap-2 justify-between items-center mx-2">
-            <div className="flex flex-row gap-2 items-center">
-              <p className="font-semibold my-2">Overall Analysis</p>
-            </div>
+        <div className="bg-slate-200 rounded-2xl min-h-[120px] p-2">
+          <div className="flex flex-row justify-between items-center mx-2">
+            <p className="font-semibold my-2">Overall Analysis</p>
             <p className="text-sm">
               Interviewer used:{" "}
               <span className="font-medium">{interviewer?.name}</span>
             </p>
           </div>
+
           <p className="my-3 ml-2 text-sm">
             Interview Description:{" "}
             <span className="font-medium">{interview?.description}</span>
           </p>
-          <div className="flex flex-col gap-1 my-2 mt-4 mx-2 p-4 rounded-2xl bg-slate-50 shadow-md">
+
+          <div className="my-2 mt-4 mx-2 p-4 rounded-2xl bg-slate-50 shadow-md">
             <ScrollArea className="h-[250px]">
               <DataTable data={tableData} interviewId={interview?.id || ""} />
             </ScrollArea>
           </div>
-          <div className="flex flex-row gap-1 my-2 justify-center">
-            <div className="flex flex-col">
-              <div className="flex flex-col gap-1 my-2 mt-4 mx-2 p-3 rounded-2xl bg-slate-50 shadow-md max-w-[400px]">
-                <div className="flex flex-row items-center justify-center gap-1 font-semibold mb-1 text-[15px]">
+
+          <div className="flex flex-row gap-2 justify-center">
+            <div className="flex flex-col gap-2">
+              <div className="p-3 rounded-2xl bg-slate-50 shadow-md max-w-[400px]">
+                <div className="flex justify-center gap-1 font-semibold text-[15px]">
                   Average Duration
                   <InfoTooltip content="Average time users took" />
                 </div>
-                <div className="flex items-center justify-center">
-                  <p className="text-2xl font-semibold text-indigo-600 w-fit p-1 px-2 bg-indigo-100 rounded-md">
-                    {convertSecondstoMMSS(totalDuration / responses.length)}
-                  </p>
-                </div>
+                <p className="text-2xl font-semibold text-indigo-600 text-center mt-2">
+                  {convertSecondstoMMSS(totalDuration / responses.length)}
+                </p>
               </div>
-              <div className="flex flex-col items-center justify-center gap-1 mx-2 p-3 rounded-2xl bg-slate-50 shadow-md max-w-[360px]">
-                <div className="flex flex-row gap-1 font-semibold mb-1 text-[15px] mx-auto text-center">
+
+              <div className="p-3 rounded-2xl bg-slate-50 shadow-md max-w-[360px] text-center">
+                <div className="flex justify-center gap-1 font-semibold text-[15px]">
                   Interview Completion Rate
                   <InfoTooltip content="Percentage of interviews completed" />
                 </div>
-                <p className="w-fit text-2xl font-semibold text-indigo-600  p-1 px-2 bg-indigo-100 rounded-md">
-                  {Math.round((completedInterviews / responses.length) * 10000) /
-                    100}
+                <p className="text-2xl font-semibold text-indigo-600 mt-2">
+                  {Math.round(
+                    (completedInterviews / responses.length) * 10000
+                  ) / 100}
                   %
                 </p>
               </div>
             </div>
-            <div className="flex flex-col gap-1 my-2 mt-4 mx-2 p-4 rounded-2xl bg-slate-50 shadow-md max-w-[360px]">
-              <div className="flex flex-row gap-2 text-[15px] font-bold mb-3 mx-auto">
+
+            <div className="p-4 rounded-2xl bg-slate-50 shadow-md max-w-[360px]">
+              <div className="flex justify-center gap-2 font-bold mb-3">
                 <SmileIcon /> Candidate Sentiment
               </div>
               <PieChart
@@ -238,7 +228,7 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
       ) : (
         <div className="w-[85%] h-[60%] flex flex-col items-center justify-center">
           <Image src="/no-responses.png" alt="logo" width={270} height={270} />
-          <p className="text-center text-sm mt-0">
+          <p className="text-center text-sm">
             Please share with your intended respondents
           </p>
         </div>
@@ -247,5 +237,4 @@ function SummaryInfo({ responses, interview }: SummaryProps) {
   );
 }
 
-// Added the mandatory default export to fix the build failure
 export default SummaryInfo;
