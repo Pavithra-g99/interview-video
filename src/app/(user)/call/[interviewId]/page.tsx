@@ -132,54 +132,50 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * SILENT VIRTUAL MIXER
-   * Combines Candidate Mic and AI Agent Audio tracks digitally.
+   * SILENT AUDIO MIXER
+   * Captures AI voice from the playback stream and merges with microphone.
    */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // 1. Initialize AudioContext for virtual mixing
-    const audioCtx = new (window.AudioContext ||
-      (window as any).webkitAudioContext)();
+    // Create Virtual Mixer
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // 2. Connect Candidate Microphone
+    // 1. Add Microphone to mixer
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // 3. Robust AI Audio Sniffer
-    const connectAgentAudio = () => {
+    // 2. Patch AI Agent Voice track
+    const patchAgentAudio = () => {
       const audioTags = document.getElementsByTagName("audio");
-      const agentAudio = Array.from(audioTags).find(
-        (el) => el.src || el.srcObject
-      );
+      // Sniff for the AI stream source
+      const agentAudio = Array.from(audioTags).find((el) => el.srcObject !== null);
 
-      if (agentAudio) {
+      if (agentAudio && agentAudio.srcObject instanceof MediaStream) {
         try {
-          // Set crossOrigin to bypass CORS blocks during capture
-          agentAudio.crossOrigin = "anonymous";
-          const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
+          const sourceAgent = audioCtx.createMediaStreamSource(agentAudio.srcObject);
           sourceAgent.connect(destination);
-          sourceAgent.connect(audioCtx.destination); // Route to speakers so candidate hears AI
+          console.log("Mixed AI Audio successfully.");
         } catch (e) {
-          console.warn("AI Audio connection notice:", e);
+          console.warn("Retrying AI Audio patch...", e);
+          setTimeout(patchAgentAudio, 1000);
         }
       } else {
-        // Retry if Retell hasn't mounted the audio tag yet
-        setTimeout(connectAgentAudio, 1500);
+        setTimeout(patchAgentAudio, 1000); // Wait for AI to connect
       }
     };
 
-    connectAgentAudio();
+    patchAgentAudio();
 
-    // 4. Combine Video track + Merged Audio tracks
-    const recordingStream = new MediaStream([
+    // Combine Video Track with Mixed Audio Destination Track
+    const combinedStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
     ]);
 
-    const recorder = new MediaRecorder(recordingStream, {
+    const recorder = new MediaRecorder(combinedStream, {
       mimeType: "video/webm;codecs=vp8,opus",
     });
 
@@ -199,9 +195,7 @@ function InterviewInterface({ params }: Props) {
       if (data) {
         const {
           data: { publicUrl },
-        } = supabase.storage
-          .from("interview-videos")
-          .getPublicUrl(fileName);
+        } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
         await axios.post("/api/save-video-url", {
           call_id: callId,
           videoUrl: publicUrl,
@@ -287,5 +281,5 @@ function InterviewInterface({ params }: Props) {
   );
 }
 
-// Ensure the default export is present to fix the module build error
+// Added mandatory default export to fix module build error
 export default InterviewInterface;
