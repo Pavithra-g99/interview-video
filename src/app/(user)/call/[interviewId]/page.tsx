@@ -20,25 +20,25 @@ type Props = { params: { interviewId: string } };
 
 function PopupLoader() {
   return (
-    <div className="bg-white rounded-md absolute -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 md:w-[80%] w-[90%]">
-      <div className="h-[88vh] justify-center items-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all md:block dark:border-white">
-        <div className="relative flex flex-col items-center justify-center h-full">
+    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%]">
+      <div className="h-[88vh] items-center justify-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all dark:border-white">
+        <div className="relative flex h-full flex-col items-center justify-center">
           <LoaderWithText />
         </div>
       </div>
       <a
-        className="flex flex-row justify-center align-middle mt-3"
+        className="mt-3 flex flex-row justify-center align-middle"
         href="https://folo-up.co/"
         target="_blank"
         rel="noopener noreferrer"
       >
-        <div className="text-center text-md font-semibold mr-2">
+        <div className="mr-2 text-center text-md font-semibold">
           Powered by{" "}
           <span className="font-bold">
             Folo<span className="text-indigo-600">Up</span>
           </span>
         </div>
-        <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500" />
+        <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] scale-100 rotate-0 text-indigo-500 transition-all dark:scale-0 dark:-rotate-90" />
       </a>
     </div>
   );
@@ -54,9 +54,9 @@ function PopUpMessage({
   image: string;
 }) {
   return (
-    <div className="bg-white rounded-md absolute -translate-x-1/2 -translate-y-1/2 top-1/2 left-1/2 md:w-[80%] w-[90%]">
-      <div className="h-[88vh] content-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all md:block dark:border-white ">
-        <div className="flex flex-col items-center justify-center my-auto px-6 text-center">
+    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%]">
+      <div className="h-[88vh] content-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all dark:border-white">
+        <div className="my-auto flex flex-col items-center justify-center px-6 text-center">
           <Image
             src={image}
             alt="Graphic"
@@ -64,23 +64,23 @@ function PopUpMessage({
             height={200}
             className="mb-4"
           />
-          <h1 className="text-md font-medium mb-2">{title}</h1>
+          <h1 className="mb-2 text-md font-medium">{title}</h1>
           <p className="text-gray-600">{description}</p>
         </div>
       </div>
       <a
-        className="flex flex-row justify-center align-middle mt-3"
+        className="mt-3 flex flex-row justify-center align-middle"
         href="https://folo-up.co/"
         target="_blank"
         rel="noopener noreferrer"
       >
-        <div className="text-center text-md font-semibold mr-2">
+        <div className="mr-2 text-center text-md font-semibold">
           Powered by{" "}
           <span className="font-bold">
             Folo<span className="text-indigo-600">Up</span>
           </span>
         </div>
-        <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-indigo-500" />
+        <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] scale-100 rotate-0 text-indigo-500 transition-all dark:scale-0 dark:-rotate-90" />
       </a>
     </div>
   );
@@ -117,7 +117,6 @@ function InterviewInterface({ params }: Props) {
     fetchInterview();
   }, [interviewId, getInterviewById]);
 
-  // Request standard Camera and Mic
   const requestPermissions = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -132,31 +131,31 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * SILENT AUDIO MERGING: No sharing popup required
+   * BACKGROUND AUDIO MERGER: Captures AI Agent voice and User Mic together
    */
   const startVideoRecording = (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // Find all audio elements to locate the AI Agent output
-    const audioElements = document.getElementsByTagName("audio");
+    // Identify the specific audio element used by the AI Agent for playback
+    const audioTags = document.getElementsByTagName("audio");
     let recordingStream = stream;
 
-    // We assume the Retell/Agent audio is the first one playing if multiple exist
-    const agentAudio = Array.from(audioElements).find(
-      (el) => el.srcObject || el.src
+    const agentAudio = Array.from(audioTags).find(
+      (el) => el.src || el.srcObject
     );
 
     if (agentAudio && (agentAudio as any).captureStream) {
-      const agentAudioStream = (agentAudio as any).captureStream();
+      // Capture the internal audio stream from the AI element
+      const agentStream = (agentAudio as any).captureStream();
 
-      // Create a combined stream: User Video + User Mic + Agent Audio
-      const tracks = [
+      // Merge: User Video + User Mic + Agent Voice digital track
+      const mergedTracks = [
         ...stream.getVideoTracks(),
         ...stream.getAudioTracks(),
-        ...agentAudioStream.getAudioTracks(),
+        ...agentStream.getAudioTracks(),
       ];
 
-      recordingStream = new MediaStream(tracks);
+      recordingStream = new MediaStream(mergedTracks);
     }
 
     const recorder = new MediaRecorder(recordingStream, {
@@ -172,7 +171,7 @@ function InterviewInterface({ params }: Props) {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       const fileName = `interview-${callId}-${Date.now()}.webm`;
 
-      const { data, error } = await supabase.storage
+      const { data } = await supabase.storage
         .from("interview-videos")
         .upload(fileName, blob);
 
@@ -192,12 +191,13 @@ function InterviewInterface({ params }: Props) {
   };
 
   const stopVideoRecording = () => {
-    if (mediaRecorderRef.current?.state !== "inactive")
+    if (mediaRecorderRef.current?.state !== "inactive") {
       mediaRecorderRef.current?.stop();
+    }
     mediaStream?.getTracks().forEach((track) => track.stop());
   };
 
-  if (!interview)
+  if (!interview) {
     return interviewNotFound ? (
       <PopUpMessage
         title="Invalid URL"
@@ -207,27 +207,28 @@ function InterviewInterface({ params }: Props) {
     ) : (
       <PopupLoader />
     );
+  }
 
   if (!isVerified) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-lg w-full text-center border-2 border-indigo-100">
-          <ShieldCheck className="mx-auto h-16 w-16 text-indigo-600 mb-4" />
-          <h1 className="text-2xl font-bold mb-2">Ready for your interview?</h1>
-          <div className="relative aspect-video bg-slate-900 rounded-xl overflow-hidden mb-6 border-4 border-slate-200">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
+          <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
+          <h1 className="mb-2 text-2xl font-bold">Ready for your interview?</h1>
+          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
             {mediaStream ? (
               <video
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="h-full w-full object-cover"
                 ref={(el) => {
                   if (el) el.srcObject = mediaStream;
                 }}
               />
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-white">
-                <Video size={48} className="opacity-20 mb-2" />
+              <div className="flex h-full flex-col items-center justify-center text-white">
+                <Video size={48} className="mb-2 opacity-20" />
                 <p className="text-xs opacity-60">Camera Preview</p>
               </div>
             )}
@@ -235,16 +236,16 @@ function InterviewInterface({ params }: Props) {
           {!mediaStream ? (
             <button
               onClick={requestPermissions}
-              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold"
+              className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700"
             >
               Enable Camera & Mic
             </button>
           ) : (
             <button
               onClick={() => setIsVerified(true)}
-              className="w-full bg-green-600 text-white py-3 rounded-xl font-bold"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700"
             >
-              Hardware Verified
+              Hardware Verified <CheckCircle size={20} />
             </button>
           )}
         </div>
