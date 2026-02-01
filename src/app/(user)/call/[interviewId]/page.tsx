@@ -132,36 +132,54 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * WEB AUDIO MIXER: Combines Mic and AI Agent Audio
+   * SILENT VIRTUAL MIXER
+   * Combines Candidate Mic and AI Agent Audio tracks digitally.
    */
-  const startVideoRecording = (stream: MediaStream, callId: string) => {
+  const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // Initialize Audio Context for virtual mixing
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    // 1. Initialize AudioContext for virtual mixing
+    const audioCtx = new (window.AudioContext ||
+      (window as any).webkitAudioContext)();
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // Route Candidate Mic to mixer
+    // 2. Connect Candidate Microphone
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // Find AI Agent Audio element and route to mixer
-    const agentAudio = document.querySelector("audio");
-    if (agentAudio) {
-      agentAudio.crossOrigin = "anonymous"; // Essential for capturing remote audio
-      const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
-      sourceAgent.connect(destination);
-      sourceAgent.connect(audioCtx.destination); // Ensures user still hears the AI
-    }
+    // 3. Robust AI Audio Sniffer
+    const connectAgentAudio = () => {
+      const audioTags = document.getElementsByTagName("audio");
+      const agentAudio = Array.from(audioTags).find(
+        (el) => el.src || el.srcObject
+      );
 
-    // Merge Camera Video with Mixed Audio
-    const combinedStream = new MediaStream([
+      if (agentAudio) {
+        try {
+          // Set crossOrigin to bypass CORS blocks during capture
+          agentAudio.crossOrigin = "anonymous";
+          const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
+          sourceAgent.connect(destination);
+          sourceAgent.connect(audioCtx.destination); // Route to speakers so candidate hears AI
+        } catch (e) {
+          console.warn("AI Audio connection notice:", e);
+        }
+      } else {
+        // Retry if Retell hasn't mounted the audio tag yet
+        setTimeout(connectAgentAudio, 1500);
+      }
+    };
+
+    connectAgentAudio();
+
+    // 4. Combine Video track + Merged Audio tracks
+    const recordingStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
     ]);
 
-    const recorder = new MediaRecorder(combinedStream, {
+    const recorder = new MediaRecorder(recordingStream, {
       mimeType: "video/webm;codecs=vp8,opus",
     });
 
@@ -181,7 +199,9 @@ function InterviewInterface({ params }: Props) {
       if (data) {
         const {
           data: { publicUrl },
-        } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
+        } = supabase.storage
+          .from("interview-videos")
+          .getPublicUrl(fileName);
         await axios.post("/api/save-video-url", {
           call_id: callId,
           videoUrl: publicUrl,
@@ -218,7 +238,7 @@ function InterviewInterface({ params }: Props) {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
           <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          <h1 className="mb-2 text-2xl font-bold">Hardware Verification</h1>
+          <h1 className="mb-2 text-2xl font-bold">Ready for your interview?</h1>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
             {mediaStream ? (
               <video
@@ -233,7 +253,7 @@ function InterviewInterface({ params }: Props) {
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-white">
                 <Video size={48} className="mb-2 opacity-20" />
-                <p className="text-xs opacity-60">Preview</p>
+                <p className="text-xs opacity-60">Camera Preview</p>
               </div>
             )}
           </div>
@@ -267,5 +287,5 @@ function InterviewInterface({ params }: Props) {
   );
 }
 
-// Ensure this is present to fix "is not a module" build error
+// Ensure the default export is present to fix the module build error
 export default InterviewInterface;
