@@ -4,12 +4,7 @@ import { useInterviews } from "@/contexts/interviews.context";
 import React, { useEffect, useState, useRef } from "react";
 import Call from "@/components/call";
 import Image from "next/image";
-import {
-  ArrowUpRightSquareIcon,
-  Video,
-  CheckCircle,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowUpRightSquareIcon, Video, CheckCircle, ShieldCheck } from "lucide-react";
 import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
@@ -17,37 +12,30 @@ import axios from "axios";
 
 type Props = { params: { interviewId: string } };
 
+// UI Components for loading and errors
 function PopupLoader() {
   return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%]">
-      <div className="h-[88vh] items-center justify-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all dark:border-white">
-        <div className="relative flex h-full flex-col items-center justify-center">
-          <LoaderWithText />
-        </div>
+    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl">
+      <div className="h-[88vh] items-center justify-center rounded-lg border-2 border-black font-bold flex flex-col">
+        <LoaderWithText />
       </div>
-      <a className="mt-3 flex flex-row justify-center align-middle" href="https://folo-up.co/" target="_blank" rel="noopener noreferrer">
-        <div className="mr-2 text-center text-md font-semibold">Powered by <span className="font-bold">Folo<span className="text-indigo-600">Up</span></span></div>
-        <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] scale-100 rotate-0 text-indigo-500 transition-all dark:scale-0 dark:-rotate-90" />
-      </a>
     </div>
   );
 }
 
 function PopUpMessage({ title, description, image }: { title: string; description: string; image: string }) {
   return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%]">
-      <div className="h-[88vh] content-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all dark:border-white">
-        <div className="my-auto flex flex-col items-center justify-center px-6 text-center">
-          <Image src={image} alt="Graphic" width={200} height={200} className="mb-4" />
-          <h1 className="mb-2 text-md font-medium">{title}</h1>
-          <p className="text-gray-600">{description}</p>
-        </div>
+    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl">
+      <div className="h-[88vh] flex flex-col items-center justify-center px-6 text-center border-2 border-black rounded-lg">
+        <Image src={image} alt="Graphic" width={200} height={200} className="mb-4" />
+        <h1 className="mb-2 text-md font-medium">{title}</h1>
+        <p className="text-gray-600">{description}</p>
       </div>
     </div>
   );
 }
 
-function InterviewInterface({ params }: Props) {
+export default function InterviewInterface({ params }: Props) {
   const { interviewId } = params;
   const supabase = createClientComponentClient();
   const { getInterviewById } = useInterviews();
@@ -59,6 +47,8 @@ function InterviewInterface({ params }: Props) {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -80,29 +70,113 @@ function InterviewInterface({ params }: Props) {
     } catch (err) { console.error("Hardware permission denied"); }
   };
 
-  const startVideoRecording = async (stream: MediaStream, callId: string) => {
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8,opus" });
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = async () => {
-      if (chunksRef.current.length === 0) return;
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      const fileName = `interview-${callId}-${Date.now()}.webm`;
-      const { data } = await supabase.storage.from("interview-videos").upload(fileName, blob, { contentType: 'video/webm' });
-      if (data) {
-        const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
-        await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
+  const startVideoRecording = async (userStream: MediaStream, remoteAudioElement: HTMLAudioElement | null, callId: string) => {
+    try {
+      chunksRef.current = [];
+
+      // Create audio context for mixing
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+
+      // Create destination for mixed audio
+      const destination = audioContext.createMediaStreamDestination();
+      destinationRef.current = destination;
+
+      // Add user's microphone audio
+      const userAudioTrack = userStream.getAudioTracks()[0];
+      if (userAudioTrack) {
+        const userAudioSource = audioContext.createMediaStreamSource(
+          new MediaStream([userAudioTrack])
+        );
+        userAudioSource.connect(destination);
       }
-    };
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
+
+      // Add remote audio (interviewer's voice) if available
+      if (remoteAudioElement) {
+        try {
+          const remoteAudioSource = audioContext.createMediaElementSource(remoteAudioElement);
+          remoteAudioSource.connect(destination);
+          // Also connect to audio context destination so we can still hear it
+          remoteAudioSource.connect(audioContext.destination);
+        } catch (error) {
+          console.warn("Could not capture remote audio:", error);
+        }
+      }
+
+      // Create combined stream with user's video and mixed audio
+      const videoTrack = userStream.getVideoTracks()[0];
+      const mixedAudioTrack = destination.stream.getAudioTracks()[0];
+      
+      const combinedStream = new MediaStream([videoTrack, mixedAudioTrack]);
+
+      // Start recording with combined stream
+      const recorder = new MediaRecorder(combinedStream, { 
+        mimeType: "video/webm;codecs=vp8,opus" 
+      });
+
+      recorder.ondataavailable = (e) => { 
+        if (e.data.size > 0) chunksRef.current.push(e.data); 
+      };
+
+      recorder.onstop = async () => {
+        if (chunksRef.current.length === 0) return;
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const fileName = `interview-${callId}-${Date.now()}.webm`;
+        
+        const { data } = await supabase.storage
+          .from("interview-videos")
+          .upload(fileName, blob, { contentType: 'video/webm' });
+        
+        if (data) {
+          const { data: { publicUrl } } = supabase.storage
+            .from("interview-videos")
+            .getPublicUrl(fileName);
+          await axios.post("/api/save-video-url", { 
+            call_id: callId, 
+            videoUrl: publicUrl 
+          });
+        }
+
+        // Clean up audio context
+        if (audioContextRef.current) {
+          audioContextRef.current.close();
+          audioContextRef.current = null;
+        }
+      };
+
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+
+    } catch (error) {
+      console.error("Error starting video recording:", error);
+    }
   };
 
-  // BUILD FIX: Explicitly handle undefined to satisfy TypeScript
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    };
+  }, []);
+
+  // 1. Handle Loading/NotFound States
   if (!interview) {
-    return interviewNotFound ? <PopUpMessage title="Invalid URL" description="Check URL" image="/invalid-url.png" /> : <PopupLoader />;
+    return interviewNotFound ? (
+      <PopUpMessage title="Invalid URL" description="Please check the link and try again." image="/invalid-url.png" />
+    ) : (
+      <PopupLoader />
+    );
   }
 
+  // 2. Handle Hardware Verification
   if (!isVerified) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -126,14 +200,13 @@ function InterviewInterface({ params }: Props) {
     );
   }
 
+  // 3. Render Call
   return (
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      onStartRecording={(id) => startVideoRecording(mediaStream!, id)} 
-      onStopRecording={() => mediaRecorderRef.current?.stop()} 
+      onStartRecording={(remoteAudioEl, id) => startVideoRecording(mediaStream!, remoteAudioEl, id)} 
+      onStopRecording={stopRecording} 
     />
   );
 }
-
-export default InterviewInterface;
