@@ -97,38 +97,40 @@ function InterviewInterface({ params }: Props) {
     }
   };
 
+  /**
+   * SILENT VIRTUAL MIXER
+   * Merges AI Agent audio and Mic audio digitally.
+   */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // 1. Create Audio Context with low latency hint
+    // Create Virtual Mixer
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // 2. Connect Microphone to mixer
+    // 1. Connect Mic
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // 3. Robust AI Audio Sniffer with CORS bypass
+    // 2. Patch AI Audio Track with CORS Bypass
     const patchAgentAudio = () => {
       const audioTags = document.getElementsByTagName("audio");
       const agentAudio = Array.from(audioTags).find((el) => el.src || el.srcObject);
 
       if (agentAudio) {
         try {
-          // IMPORTANT: Set crossOrigin to allow digital capture
+          // MANDATORY: Bypass browser CORS to record digital audio
           agentAudio.crossOrigin = "anonymous"; 
-          
           const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
-          const agentGain = audioCtx.createGain();
-          agentGain.gain.value = 1.0; 
           
-          sourceAgent.connect(agentGain);
-          agentGain.connect(destination);
-          agentGain.connect(audioCtx.destination); // Route to speakers so candidate hears AI
-          console.log("Audio Mixer: AI Voice Mixed successfully.");
+          // Connect AI voice to the recording destination
+          sourceAgent.connect(destination);
+          
+          // Route to speakers so candidate can still hear the AI
+          sourceAgent.connect(audioCtx.destination); 
         } catch (e) {
-          console.warn("Retrying AI Audio connection...", e);
+          console.warn("Retrying AI Audio patch...", e);
           setTimeout(patchAgentAudio, 1500);
         }
       } else {
@@ -138,7 +140,7 @@ function InterviewInterface({ params }: Props) {
 
     patchAgentAudio();
 
-    // 4. Combine Video Track and the Mixed Audio Tracks
+    // 3. Combine Video Tracks and Mixed Audio Tracks
     const recordingStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
@@ -166,7 +168,7 @@ function InterviewInterface({ params }: Props) {
           videoUrl: publicUrl,
         });
       }
-      if (audioCtx.state !== 'closed') audioCtx.close();
+      audioCtx.close();
     };
 
     recorder.start(1000);
@@ -189,21 +191,18 @@ function InterviewInterface({ params }: Props) {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
           <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          <h1 className="mb-2 text-2xl font-bold">Ready for your interview?</h1>
-          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
+          <h1 className="mb-2 text-2xl font-bold">Hardware Verification</h1>
+          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900">
             {mediaStream ? (
               <video autoPlay muted playsInline className="h-full w-full object-cover" ref={(el) => { if (el) el.srcObject = mediaStream; }} />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center text-white">
-                <Video size={48} className="mb-2 opacity-20" />
-                <p className="text-xs opacity-60">Camera Preview</p>
-              </div>
+              <div className="flex h-full flex-col items-center justify-center text-white italic">Preview</div>
             )}
           </div>
           {!mediaStream ? (
             <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700">Enable Camera & Mic</button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Hardware Verified <CheckCircle size={20} /></button>
+            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Verified <CheckCircle size={20} /></button>
           )}
         </div>
       </div>
