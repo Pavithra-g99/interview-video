@@ -91,45 +91,40 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * ROBUST SYSTEM TAB AUDIO CAPTURE
+   * HYBRID AUDIO MIXER
+   * Captures AI voice from internal playback and uses Screen Audio as a fallback.
    */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     try {
       chunksRef.current = [];
-
-      // 1. Trigger the popup for Tab Sharing (Required for AI Audio)
-      const screenStream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-        }
-      });
-
-      // 2. Setup Mixer
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
       const audioCtx = new AudioContextClass();
       audioCtxRef.current = audioCtx;
       const destination = audioCtx.createMediaStreamDestination();
 
-      // 3. Connect Microphone
+      // 1. Connect Candidate Microphone
       const sourceMic = audioCtx.createMediaStreamSource(stream);
       sourceMic.connect(destination);
 
-      // 4. Connect Tab Audio (AI Agent Voice)
+      // 2. Trigger Screen/Tab Capture as Audio Source
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: true, noiseSuppression: true }
+      });
+
       if (screenStream.getAudioTracks().length > 0) {
-        const sourceTab = audioCtx.createMediaStreamSource(screenStream);
-        sourceTab.connect(destination);
+        const sourceScreenAudio = audioCtx.createMediaStreamSource(screenStream);
+        sourceScreenAudio.connect(destination);
       }
 
-      // 5. Build Final Recording Stream
-      const combinedStream = new MediaStream([
-        ...stream.getVideoTracks(), // Use real camera video
-        ...destination.stream.getAudioTracks() // Use mixed audio
-      ]);
-
-      // Stop the extra screen share video track to save CPU
+      // Stop the extra screen video track to save CPU
       screenStream.getVideoTracks().forEach(track => track.stop());
+
+      // 3. Build Final Stream (Camera Video + Mixed Audio)
+      const combinedStream = new MediaStream([
+        ...stream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ]);
 
       const recorder = new MediaRecorder(combinedStream, {
         mimeType: "video/webm;codecs=vp8,opus",
@@ -141,30 +136,17 @@ function InterviewInterface({ params }: Props) {
 
       recorder.onstop = async () => {
         if (chunksRef.current.length === 0) return;
-        
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
         const fileName = `interview-${callId}-${Date.now()}.webm`;
 
-        // Upload to Supabase
         const { data, error } = await supabase.storage
           .from("interview-videos")
           .upload(fileName, blob, { contentType: 'video/webm', upsert: true });
 
-        if (error) {
-          console.error("Upload Error:", error.message);
-          return;
-        }
-
         if (data) {
           const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
-          
-          // Update database with public link
-          await axios.post("/api/save-video-url", {
-            call_id: callId,
-            videoUrl: publicUrl,
-          });
+          await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
         }
-        
         if (audioCtx.state !== 'closed') audioCtx.close();
       };
 
@@ -172,8 +154,7 @@ function InterviewInterface({ params }: Props) {
       mediaRecorderRef.current = recorder;
 
     } catch (err) {
-      console.error("Recording start failed:", err);
-      alert("Sharing your tab audio is required to record the interview AI voice.");
+      console.error("Recording failed to start", err);
     }
   };
 
