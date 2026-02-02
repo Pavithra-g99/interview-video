@@ -2,13 +2,22 @@
 
 import { useInterviewers } from "@/contexts/interviewers.context";
 import React from "react";
-import { ChevronLeft } from "lucide-react";
-import { ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import InterviewerCard from "@/components/dashboard/interviewer/interviewerCard";
 import CreateInterviewerButton from "@/components/dashboard/interviewer/createInterviewerButton";
 
 function Interviewers() {
   const { interviewers, interviewersLoading } = useInterviewers();
+
+  // DEDUPLICATION: Ensures only one Lisa and one Bob are shown
+  const uniqueInterviewers = interviewers.reduce((acc: any[], current: any) => {
+    const isDuplicate = acc.find((item) => item.name === current.name);
+    if (!isDuplicate) {
+      return acc.concat([current]);
+    } else {
+      return acc;
+    }
+  }, []);
 
   const slideLeft = () => {
     var slider = document.getElementById("slider");
@@ -26,13 +35,11 @@ function Interviewers() {
 
   function InterviewersLoader() {
     return (
-      <>
-        <div className="flex">
-          <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
-          <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
-          <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
-        </div>
-      </>
+      <div className="flex">
+        <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
+        <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
+        <div className="h-40 w-36 ml-1 mr-3 flex-none animate-pulse rounded-xl bg-gray-300" />
+      </div>
     );
   }
 
@@ -54,10 +61,13 @@ function Interviewers() {
             id="slider"
             className=" h-44 pt-2 overflow-x-scroll scroll whitespace-nowrap scroll-smooth scrollbar-hide w-[40rem]"
           >
-            {interviewers.length === 0 ? <CreateInterviewerButton /> : <></>}
+            {uniqueInterviewers.length === 0 && !interviewersLoading ? (
+              <CreateInterviewerButton />
+            ) : null}
+            
             {!interviewersLoading ? (
               <>
-                {interviewers.map((interviewer) => (
+                {uniqueInterviewers.map((interviewer) => (
                   <InterviewerCard
                     key={interviewer.id}
                     interviewer={interviewer}
@@ -68,7 +78,8 @@ function Interviewers() {
               <InterviewersLoader />
             )}
           </div>
-          {interviewers.length > 4 ? (
+          
+          {uniqueInterviewers.length > 4 ? (
             <div className="flex-row justify-center items-center space-y-10">
               <ChevronRight
                 className="opacity-50 cursor-pointer hover:opacity-100"
@@ -81,9 +92,7 @@ function Interviewers() {
                 onClick={() => slideLeft()}
               />
             </div>
-          ) : (
-            <></>
-          )}
+          ) : null}
         </div>
       </div>
     </main>
