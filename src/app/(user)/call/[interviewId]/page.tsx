@@ -91,10 +91,6 @@ function InterviewInterface({ params }: Props) {
     } catch (err) { setPermissionError(true); }
   };
 
-  /**
-   * NON-GLITCHING AUDIO MIXER
-   * Uses MediaStreamSource instead of ElementSource to prevent stuttering.
-   */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     mixedElementsRef.current = new WeakSet();
@@ -115,32 +111,25 @@ function InterviewInterface({ params }: Props) {
       sourceMic.connect(destination);
     }
 
-    // 2. Optimized AI Voice Capture (Prevents Glitching)
+    // 2. Non-Glitching AI Voice Capture
     const patchAgentAudio = () => {
       const audioTags = document.querySelectorAll("audio");
-
       audioTags.forEach((audioEl) => {
         if (mixedElementsRef.current.has(audioEl)) return;
-
         try {
-          // Use srcObject directly to avoid hijacking the element
           if (audioEl.srcObject instanceof MediaStream) {
             const sourceAgent = audioCtx.createMediaStreamSource(audioEl.srcObject);
             sourceAgent.connect(destination);
             mixedElementsRef.current.add(audioEl);
-            console.log("AI Audio tapped successfully without glitching");
-          } 
-          // Fallback for standard src tags with CORS
-          else if (audioEl.src) {
+          } else if (audioEl.src) {
             audioEl.crossOrigin = "anonymous";
             const sourceAgent = audioCtx.createMediaElementSource(audioEl);
             sourceAgent.connect(destination);
-            sourceAgent.connect(audioCtx.destination); // Play through speakers
+            sourceAgent.connect(audioCtx.destination);
             mixedElementsRef.current.add(audioEl);
           }
         } catch (e) { console.warn("Audio mixing warning:", e); }
       });
-
       if (mediaRecorderRef.current?.state === "recording") {
         setTimeout(patchAgentAudio, 2000);
       }
@@ -161,16 +150,33 @@ function InterviewInterface({ params }: Props) {
 
     recorder.onstop = async () => {
       if (chunksRef.current.length === 0) return;
+      
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      const fileName = `interview-${callId}-${Date.now()}.webm`;
+      const fileName = `${callId}-${Date.now()}.webm`;
 
+      // Upload to Supabase
       const { data, error } = await supabase.storage
         .from("interview-videos")
         .upload(fileName, blob, { contentType: 'video/webm', upsert: true });
 
+      if (error) {
+        console.error("Upload Error:", error);
+        return;
+      }
+
       if (data) {
-        const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
-        await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
+        // Generate the public URL correctly
+        const { data: { publicUrl } } = supabase.storage
+          .from("interview-videos")
+          .getPublicUrl(fileName);
+        
+        console.log("Saving URL to DB:", publicUrl);
+
+        // Update the database
+        await axios.post("/api/save-video-url", {
+          call_id: callId,
+          videoUrl: publicUrl,
+        });
       }
       
       if (audioCtx.state !== 'closed') audioCtx.close();
@@ -206,7 +212,7 @@ function InterviewInterface({ params }: Props) {
           {!mediaStream ? (
             <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700">Enable Camera & Mic</button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Verified <CheckCircle size={20} /></button>
+            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Hardware Verified <CheckCircle size={20} /></button>
           )}
         </div>
       </div>
