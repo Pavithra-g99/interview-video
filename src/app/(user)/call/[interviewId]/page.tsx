@@ -65,7 +65,6 @@ function InterviewInterface({ params }: Props) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const mixedElementsRef = useRef<WeakSet<HTMLMediaElement>>(new WeakSet());
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -91,100 +90,93 @@ function InterviewInterface({ params }: Props) {
     } catch (err) { setPermissionError(true); }
   };
 
+  /**
+   * SYSTEM TAB AUDIO CAPTURE
+   * Captures the high-quality audio from the browser tab and merges with mic.
+   */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
-    chunksRef.current = [];
-    mixedElementsRef.current = new WeakSet();
+    try {
+      chunksRef.current = [];
 
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    const audioCtx = new AudioContextClass();
-    audioCtxRef.current = audioCtx;
+      // 1. Prompt user for Tab Sharing (Required for high-quality system audio)
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+        }
+      });
 
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
+      // 2. Setup Mixer
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioContextClass();
+      audioCtxRef.current = audioCtx;
+      const destination = audioCtx.createMediaStreamDestination();
 
-    const destination = audioCtx.createMediaStreamDestination();
-
-    // 1. Connect Candidate Mic
-    if (stream.getAudioTracks().length > 0) {
+      // 3. Connect Microphone
       const sourceMic = audioCtx.createMediaStreamSource(stream);
       sourceMic.connect(destination);
-    }
 
-    // 2. Non-Glitching AI Voice Capture
-    const patchAgentAudio = () => {
-      const audioTags = document.querySelectorAll("audio");
-      audioTags.forEach((audioEl) => {
-        if (mixedElementsRef.current.has(audioEl)) return;
-        try {
-          if (audioEl.srcObject instanceof MediaStream) {
-            const sourceAgent = audioCtx.createMediaStreamSource(audioEl.srcObject);
-            sourceAgent.connect(destination);
-            mixedElementsRef.current.add(audioEl);
-          } else if (audioEl.src) {
-            audioEl.crossOrigin = "anonymous";
-            const sourceAgent = audioCtx.createMediaElementSource(audioEl);
-            sourceAgent.connect(destination);
-            sourceAgent.connect(audioCtx.destination);
-            mixedElementsRef.current.add(audioEl);
-          }
-        } catch (e) { console.warn("Audio mixing warning:", e); }
+      // 4. Connect Tab Audio (AI Voice)
+      if (screenStream.getAudioTracks().length > 0) {
+        const sourceTab = audioCtx.createMediaStreamSource(screenStream);
+        sourceTab.connect(destination);
+      }
+
+      // 5. Build Combined Stream (Camera Video + Mixed Audio)
+      const combinedStream = new MediaStream([
+        ...stream.getVideoTracks(),
+        ...destination.stream.getAudioTracks()
+      ]);
+
+      // Stop the invisible screen share track to save resources
+      screenStream.getVideoTracks().forEach(track => track.stop());
+
+      const recorder = new MediaRecorder(combinedStream, {
+        mimeType: "video/webm;codecs=vp8,opus",
       });
-      if (mediaRecorderRef.current?.state === "recording") {
-        setTimeout(patchAgentAudio, 2000);
-      }
-    };
 
-    const recordingStream = new MediaStream([
-      ...stream.getVideoTracks(),
-      ...destination.stream.getAudioTracks(),
-    ]);
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-    const recorder = new MediaRecorder(recordingStream, {
-      mimeType: "video/webm;codecs=vp8,opus",
-    });
-
-    recorder.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-
-    recorder.onstop = async () => {
-      if (chunksRef.current.length === 0) return;
-      
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      const fileName = `${callId}-${Date.now()}.webm`;
-
-      // Upload to Supabase
-      const { data, error } = await supabase.storage
-        .from("interview-videos")
-        .upload(fileName, blob, { contentType: 'video/webm', upsert: true });
-
-      if (error) {
-        console.error("Upload Error:", error);
-        return;
-      }
-
-      if (data) {
-        // Generate the public URL correctly
-        const { data: { publicUrl } } = supabase.storage
-          .from("interview-videos")
-          .getPublicUrl(fileName);
+      recorder.onstop = async () => {
+        if (chunksRef.current.length === 0) return;
         
-        console.log("Saving URL to DB:", publicUrl);
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const fileName = `interview-${callId}-${Date.now()}.webm`;
 
-        // Update the database
-        await axios.post("/api/save-video-url", {
-          call_id: callId,
-          videoUrl: publicUrl,
-        });
-      }
-      
-      if (audioCtx.state !== 'closed') audioCtx.close();
-    };
+        // Upload to Supabase
+        const { data, error } = await supabase.storage
+          .from("interview-videos")
+          .upload(fileName, blob, { contentType: 'video/webm', upsert: true });
 
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
-    patchAgentAudio();
+        if (error) {
+          console.error("Upload Error:", error.message);
+          return;
+        }
+
+        if (data) {
+          const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
+          
+          // Update DB
+          await axios.post("/api/save-video-url", {
+            call_id: callId,
+            videoUrl: publicUrl,
+          });
+        }
+        
+        if (audioCtx.state !== 'closed') audioCtx.close();
+      };
+
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+
+    } catch (err) {
+      console.error("Recording start failed:", err);
+      // Fallback if user cancels the screen share popup
+      alert("Please ensure you share your tab audio to record the interview.");
+    }
   };
 
   const stopVideoRecording = () => {
