@@ -132,8 +132,8 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * SILENT AUDIO MIXER
-   * Captures AI voice from the playback stream and merges with microphone.
+   * SILENT VIRTUAL MIXER
+   * Merges AI Agent audio and Mic audio digitally.
    */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
@@ -143,39 +143,39 @@ function InterviewInterface({ params }: Props) {
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // 1. Add Microphone to mixer
+    // 1. Connect Mic
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // 2. Patch AI Agent Voice track
+    // 2. Patch AI Audio Track
     const patchAgentAudio = () => {
       const audioTags = document.getElementsByTagName("audio");
-      // Sniff for the AI stream source
-      const agentAudio = Array.from(audioTags).find((el) => el.srcObject !== null);
+      const agentAudio = Array.from(audioTags).find((el) => el.src || el.srcObject);
 
-      if (agentAudio && agentAudio.srcObject instanceof MediaStream) {
+      if (agentAudio) {
         try {
-          const sourceAgent = audioCtx.createMediaStreamSource(agentAudio.srcObject);
+          agentAudio.crossOrigin = "anonymous";
+          const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
           sourceAgent.connect(destination);
-          console.log("Mixed AI Audio successfully.");
+          sourceAgent.connect(audioCtx.destination);
         } catch (e) {
           console.warn("Retrying AI Audio patch...", e);
-          setTimeout(patchAgentAudio, 1000);
+          setTimeout(patchAgentAudio, 1500);
         }
       } else {
-        setTimeout(patchAgentAudio, 1000); // Wait for AI to connect
+        setTimeout(patchAgentAudio, 1500);
       }
     };
 
     patchAgentAudio();
 
-    // Combine Video Track with Mixed Audio Destination Track
-    const combinedStream = new MediaStream([
+    // Combine Tracks
+    const recordingStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
     ]);
 
-    const recorder = new MediaRecorder(combinedStream, {
+    const recorder = new MediaRecorder(recordingStream, {
       mimeType: "video/webm;codecs=vp8,opus",
     });
 
@@ -232,8 +232,8 @@ function InterviewInterface({ params }: Props) {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
           <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          <h1 className="mb-2 text-2xl font-bold">Ready for your interview?</h1>
-          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
+          <h1 className="mb-2 text-2xl font-bold">Hardware Verification</h1>
+          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900">
             {mediaStream ? (
               <video
                 autoPlay
@@ -245,9 +245,8 @@ function InterviewInterface({ params }: Props) {
                 }}
               />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center text-white">
-                <Video size={48} className="mb-2 opacity-20" />
-                <p className="text-xs opacity-60">Camera Preview</p>
+              <div className="flex h-full flex-col items-center justify-center text-white italic">
+                Preview
               </div>
             )}
           </div>
@@ -263,7 +262,7 @@ function InterviewInterface({ params }: Props) {
               onClick={() => setIsVerified(true)}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700"
             >
-              Hardware Verified <CheckCircle size={20} />
+              Verified <CheckCircle size={20} />
             </button>
           )}
         </div>
@@ -281,5 +280,5 @@ function InterviewInterface({ params }: Props) {
   );
 }
 
-// Added mandatory default export to fix module build error
+// Added mandatory default export
 export default InterviewInterface;
