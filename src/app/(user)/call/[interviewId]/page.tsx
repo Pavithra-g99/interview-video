@@ -26,60 +26,26 @@ function PopupLoader() {
           <LoaderWithText />
         </div>
       </div>
-      <a
-        className="mt-3 flex flex-row justify-center align-middle"
-        href="https://folo-up.co/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <div className="mr-2 text-center text-md font-semibold">
-          Powered by{" "}
-          <span className="font-bold">
-            Folo<span className="text-indigo-600">Up</span>
-          </span>
-        </div>
+      <a className="mt-3 flex flex-row justify-center align-middle" href="https://folo-up.co/" target="_blank" rel="noopener noreferrer">
+        <div className="mr-2 text-center text-md font-semibold">Powered by <span className="font-bold">Folo<span className="text-indigo-600">Up</span></span></div>
         <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] scale-100 rotate-0 text-indigo-500 transition-all dark:scale-0 dark:-rotate-90" />
       </a>
     </div>
   );
 }
 
-function PopUpMessage({
-  title,
-  description,
-  image,
-}: {
-  title: string;
-  description: string;
-  image: string;
-}) {
+function PopUpMessage({ title, description, image }: { title: string; description: string; image: string }) {
   return (
     <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%]">
       <div className="h-[88vh] content-center rounded-lg border-2 border-b-4 border-r-4 border-black font-bold transition-all dark:border-white">
         <div className="my-auto flex flex-col items-center justify-center px-6 text-center">
-          <Image
-            src={image}
-            alt="Graphic"
-            width={200}
-            height={200}
-            className="mb-4"
-          />
+          <Image src={image} alt="Graphic" width={200} height={200} className="mb-4" />
           <h1 className="mb-2 text-md font-medium">{title}</h1>
           <p className="text-gray-600">{description}</p>
         </div>
       </div>
-      <a
-        className="mt-3 flex flex-row justify-center align-middle"
-        href="https://folo-up.co/"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        <div className="mr-2 text-center text-md font-semibold">
-          Powered by{" "}
-          <span className="font-bold">
-            Folo<span className="text-indigo-600">Up</span>
-          </span>
-        </div>
+      <a className="mt-3 flex flex-row justify-center align-middle" href="https://folo-up.co/" target="_blank" rel="noopener noreferrer">
+        <div className="mr-2 text-center text-md font-semibold">Powered by <span className="font-bold">Folo<span className="text-indigo-600">Up</span></span></div>
         <ArrowUpRightSquareIcon className="h-[1.5rem] w-[1.5rem] scale-100 rotate-0 text-indigo-500 transition-all dark:scale-0 dark:-rotate-90" />
       </a>
     </div>
@@ -131,52 +97,48 @@ function InterviewInterface({ params }: Props) {
     }
   };
 
-  /**
-   * SILENT VIRTUAL MIXER
-   * Combines Candidate Mic and AI Agent Audio with interaction-based initialization.
-   */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // Initialize Audio Context
+    // 1. Create Audio Context with low latency hint
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
-    // Explicitly resume context to bypass browser blocking
-    if (audioCtx.state === 'suspended') {
-      await audioCtx.resume();
-    }
-    
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // 1. Connect Microphone
+    // 2. Connect Microphone to mixer
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // 2. Patch AI Agent Audio
-    const connectAgentAudio = () => {
+    // 3. Robust AI Audio Sniffer with CORS bypass
+    const patchAgentAudio = () => {
       const audioTags = document.getElementsByTagName("audio");
-      // Sniff for the AI stream rather than just the element
-      const agentAudio = Array.from(audioTags).find((el) => el.srcObject !== null || el.src !== "");
+      const agentAudio = Array.from(audioTags).find((el) => el.src || el.srcObject);
 
       if (agentAudio) {
         try {
-          agentAudio.crossOrigin = "anonymous"; // Bypass CORS
+          // IMPORTANT: Set crossOrigin to allow digital capture
+          agentAudio.crossOrigin = "anonymous"; 
+          
           const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
-          sourceAgent.connect(destination);
-          sourceAgent.connect(audioCtx.destination); // Required for candidate to hear AI
-          console.log("Audio Mixer: AI Agent Connected");
+          const agentGain = audioCtx.createGain();
+          agentGain.gain.value = 1.0; 
+          
+          sourceAgent.connect(agentGain);
+          agentGain.connect(destination);
+          agentGain.connect(audioCtx.destination); // Route to speakers so candidate hears AI
+          console.log("Audio Mixer: AI Voice Mixed successfully.");
         } catch (e) {
           console.warn("Retrying AI Audio connection...", e);
+          setTimeout(patchAgentAudio, 1500);
         }
       } else {
-        setTimeout(connectAgentAudio, 1500); // Retry until AI connects
+        setTimeout(patchAgentAudio, 1500);
       }
     };
 
-    connectAgentAudio();
+    patchAgentAudio();
 
-    // 3. Combine Tracks for Recorder
+    // 4. Combine Video Track and the Mixed Audio Tracks
     const recordingStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
@@ -195,24 +157,19 @@ function InterviewInterface({ params }: Props) {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       const fileName = `interview-${callId}-${Date.now()}.webm`;
 
-      // Upload to Supabase
-      const { data } = await supabase.storage
-        .from("interview-videos")
-        .upload(fileName, blob);
+      const { data } = await supabase.storage.from("interview-videos").upload(fileName, blob);
 
       if (data) {
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
+        const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
         await axios.post("/api/save-video-url", {
           call_id: callId,
           videoUrl: publicUrl,
         });
       }
-      audioCtx.close();
+      if (audioCtx.state !== 'closed') audioCtx.close();
     };
 
-    recorder.start(1000); // Small chunks prevent lagging
+    recorder.start(1000);
     mediaRecorderRef.current = recorder;
   };
 
@@ -224,15 +181,7 @@ function InterviewInterface({ params }: Props) {
   };
 
   if (!interview) {
-    return interviewNotFound ? (
-      <PopUpMessage
-        title="Invalid URL"
-        description="Check URL"
-        image="/invalid-url.png"
-      />
-    ) : (
-      <PopupLoader />
-    );
+    return interviewNotFound ? <PopUpMessage title="Invalid URL" description="Check URL" image="/invalid-url.png" /> : <PopupLoader />;
   }
 
   if (!isVerified) {
@@ -243,15 +192,7 @@ function InterviewInterface({ params }: Props) {
           <h1 className="mb-2 text-2xl font-bold">Ready for your interview?</h1>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
             {mediaStream ? (
-              <video
-                autoPlay
-                muted
-                playsInline
-                className="h-full w-full object-cover"
-                ref={(el) => {
-                  if (el) el.srcObject = mediaStream;
-                }}
-              />
+              <video autoPlay muted playsInline className="h-full w-full object-cover" ref={(el) => { if (el) el.srcObject = mediaStream; }} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center text-white">
                 <Video size={48} className="mb-2 opacity-20" />
@@ -260,19 +201,9 @@ function InterviewInterface({ params }: Props) {
             )}
           </div>
           {!mediaStream ? (
-            <button
-              onClick={requestPermissions}
-              className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700"
-            >
-              Enable Camera & Mic
-            </button>
+            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700">Enable Camera & Mic</button>
           ) : (
-            <button
-              onClick={() => setIsVerified(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700"
-            >
-              Hardware Verified <CheckCircle size={20} />
-            </button>
+            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Hardware Verified <CheckCircle size={20} /></button>
           )}
         </div>
       </div>
@@ -289,5 +220,4 @@ function InterviewInterface({ params }: Props) {
   );
 }
 
-// Added mandatory default export to fix module build error
 export default InterviewInterface;
