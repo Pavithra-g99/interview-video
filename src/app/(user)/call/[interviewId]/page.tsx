@@ -91,14 +91,13 @@ function InterviewInterface({ params }: Props) {
   };
 
   /**
-   * SYSTEM TAB AUDIO CAPTURE
-   * Captures the high-quality audio from the browser tab and merges with mic.
+   * ROBUST SYSTEM TAB AUDIO CAPTURE
    */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     try {
       chunksRef.current = [];
 
-      // 1. Prompt user for Tab Sharing (Required for high-quality system audio)
+      // 1. Trigger the popup for Tab Sharing (Required for AI Audio)
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: {
@@ -117,19 +116,19 @@ function InterviewInterface({ params }: Props) {
       const sourceMic = audioCtx.createMediaStreamSource(stream);
       sourceMic.connect(destination);
 
-      // 4. Connect Tab Audio (AI Voice)
+      // 4. Connect Tab Audio (AI Agent Voice)
       if (screenStream.getAudioTracks().length > 0) {
         const sourceTab = audioCtx.createMediaStreamSource(screenStream);
         sourceTab.connect(destination);
       }
 
-      // 5. Build Combined Stream (Camera Video + Mixed Audio)
+      // 5. Build Final Recording Stream
       const combinedStream = new MediaStream([
-        ...stream.getVideoTracks(),
-        ...destination.stream.getAudioTracks()
+        ...stream.getVideoTracks(), // Use real camera video
+        ...destination.stream.getAudioTracks() // Use mixed audio
       ]);
 
-      // Stop the invisible screen share track to save resources
+      // Stop the extra screen share video track to save CPU
       screenStream.getVideoTracks().forEach(track => track.stop());
 
       const recorder = new MediaRecorder(combinedStream, {
@@ -159,7 +158,7 @@ function InterviewInterface({ params }: Props) {
         if (data) {
           const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
           
-          // Update DB
+          // Update database with public link
           await axios.post("/api/save-video-url", {
             call_id: callId,
             videoUrl: publicUrl,
@@ -174,8 +173,7 @@ function InterviewInterface({ params }: Props) {
 
     } catch (err) {
       console.error("Recording start failed:", err);
-      // Fallback if user cancels the screen share popup
-      alert("Please ensure you share your tab audio to record the interview.");
+      alert("Sharing your tab audio is required to record the interview AI voice.");
     }
   };
 
