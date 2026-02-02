@@ -12,7 +12,6 @@ import axios from "axios";
 
 type Props = { params: { interviewId: string } };
 
-// UI Components for loading and errors
 function PopupLoader() {
   return (
     <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl">
@@ -86,7 +85,6 @@ export default function InterviewInterface({ params }: Props) {
     mediaRecorderRef.current = recorder;
   };
 
-  // 1. Handle Loading/NotFound States
   if (!interview) {
     return interviewNotFound ? (
       <PopUpMessage title="Invalid URL" description="Please check the link and try again." image="/invalid-url.png" />
@@ -95,7 +93,6 @@ export default function InterviewInterface({ params }: Props) {
     );
   }
 
-  // 2. Handle Hardware Verification
   if (!isVerified) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -119,7 +116,6 @@ export default function InterviewInterface({ params }: Props) {
     );
   }
 
-  // 3. Render Call (Now TypeScript knows 'interview' is definitely defined)
   return (
     <Call 
       interview={interview} 
