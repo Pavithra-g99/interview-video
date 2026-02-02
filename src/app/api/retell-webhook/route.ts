@@ -1,17 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''; // From image_031957.png
-
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+// Initializing Supabase with Service Role Key to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export async function POST(req: Request) {
   try {
     const payload = await req.json();
     console.log("Retell Webhook Payload:", payload);
 
-    // Any Retell event containing a recording_url will update the DB
+    // Capture the recording_url regardless of event type
     if (payload.recording_url && payload.call_id) {
       const { error } = await supabase
         .from('interview_responses')
@@ -21,9 +22,8 @@ export async function POST(req: Request) {
       if (error) throw error;
       return NextResponse.json({ message: 'Success' }, { status: 200 });
     }
-    return NextResponse.json({ message: 'No recording in payload' }, { status: 200 });
+    return NextResponse.json({ message: 'Recording link not found' }, { status: 200 });
   } catch (err) {
-    console.error('Webhook Error:', err);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Webhook failed' }, { status: 500 });
   }
 }
