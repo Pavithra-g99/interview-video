@@ -133,46 +133,50 @@ function InterviewInterface({ params }: Props) {
 
   /**
    * SILENT VIRTUAL MIXER
-   * Electronically merges Candidate Mic and AI Agent Audio with latency optimization.
+   * Combines Candidate Mic and AI Agent Audio with interaction-based initialization.
    */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
 
-    // Initialize Audio Context with interactive latency hint to prevent lag
-    const audioCtx = new (window.AudioContext ||
-      (window as any).webkitAudioContext)({ latencyHint: 'interactive' });
+    // Initialize Audio Context
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // Explicitly resume context to bypass browser blocking
+    if (audioCtx.state === 'suspended') {
+      await audioCtx.resume();
+    }
+    
     audioCtxRef.current = audioCtx;
     const destination = audioCtx.createMediaStreamDestination();
 
-    // 1. Connect Candidate Microphone
+    // 1. Connect Microphone
     const sourceMic = audioCtx.createMediaStreamSource(stream);
     sourceMic.connect(destination);
 
-    // 2. Patch AI Agent Voice track
-    const patchAgentAudio = () => {
+    // 2. Patch AI Agent Audio
+    const connectAgentAudio = () => {
       const audioTags = document.getElementsByTagName("audio");
-      // Sniff for the AI stream source
-      const agentAudio = Array.from(audioTags).find((el) => el.src || el.srcObject);
+      // Sniff for the AI stream rather than just the element
+      const agentAudio = Array.from(audioTags).find((el) => el.srcObject !== null || el.src !== "");
 
       if (agentAudio) {
         try {
-          // Bypasses CORS blocks during capture
-          agentAudio.crossOrigin = "anonymous";
+          agentAudio.crossOrigin = "anonymous"; // Bypass CORS
           const sourceAgent = audioCtx.createMediaElementSource(agentAudio);
           sourceAgent.connect(destination);
-          sourceAgent.connect(audioCtx.destination); // Route to speakers
+          sourceAgent.connect(audioCtx.destination); // Required for candidate to hear AI
+          console.log("Audio Mixer: AI Agent Connected");
         } catch (e) {
-          console.warn("AI Audio connection notice:", e);
+          console.warn("Retrying AI Audio connection...", e);
         }
       } else {
-        // Wait for AI to connect
-        setTimeout(patchAgentAudio, 1500);
+        setTimeout(connectAgentAudio, 1500); // Retry until AI connects
       }
     };
 
-    patchAgentAudio();
+    connectAgentAudio();
 
-    // 3. Create Merged Stream for Recorder
+    // 3. Combine Tracks for Recorder
     const recordingStream = new MediaStream([
       ...stream.getVideoTracks(),
       ...destination.stream.getAudioTracks(),
@@ -180,7 +184,6 @@ function InterviewInterface({ params }: Props) {
 
     const recorder = new MediaRecorder(recordingStream, {
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 2500000 // 2.5 Mbps for stability
     });
 
     recorder.ondataavailable = (e) => {
@@ -192,6 +195,7 @@ function InterviewInterface({ params }: Props) {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       const fileName = `interview-${callId}-${Date.now()}.webm`;
 
+      // Upload to Supabase
       const { data } = await supabase.storage
         .from("interview-videos")
         .upload(fileName, blob);
@@ -205,10 +209,10 @@ function InterviewInterface({ params }: Props) {
           videoUrl: publicUrl,
         });
       }
-      if (audioCtx.state !== 'closed') audioCtx.close(); // Clean up context to prevent lag
+      audioCtx.close();
     };
 
-    recorder.start(1000); // Chunking reduces memory pressure
+    recorder.start(1000); // Small chunks prevent lagging
     mediaRecorderRef.current = recorder;
   };
 
