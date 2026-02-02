@@ -43,7 +43,7 @@ const webClient = new RetellWebClient();
 type InterviewProps = {
   interview: Interview;
   videoStream: MediaStream | null;
-  onStartRecording: (callId: string) => void;
+  onStartRecording: (remoteAudioElement: HTMLAudioElement | null, callId: string) => void;
   onStopRecording: () => void;
 };
 
@@ -75,6 +75,7 @@ function Call({
 
   const lastUserResponseRef = useRef<HTMLDivElement | null>(null);
   const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (videoPreviewRef.current && videoStream) {
@@ -117,7 +118,9 @@ function Call({
     webClient.on("call_started", () => {
       setIsCalling(true);
       if (callId) {
-        onStartRecording(callId);
+        // Get the remote audio element from Retell SDK
+        const audioElement = getRetellAudioElement();
+        onStartRecording(audioElement, callId);
       }
     });
 
@@ -149,6 +152,32 @@ function Call({
       webClient.removeAllListeners();
     };
   }, [callId, onStartRecording, onStopRecording]);
+
+  // Helper function to get the Retell audio element
+  const getRetellAudioElement = (): HTMLAudioElement | null => {
+    try {
+      // The Retell SDK creates an audio element - we need to find it
+      // It's typically created with an ID or class by the SDK
+      const audioElements = document.querySelectorAll('audio');
+      
+      // Find the audio element that's playing the remote stream
+      for (let i = 0; i < audioElements.length; i++) {
+        const audio = audioElements[i];
+        // The Retell SDK's audio element usually has a srcObject
+        if (audio.srcObject) {
+          remoteAudioRef.current = audio;
+          return audio;
+        }
+      }
+      
+      // If we couldn't find it, return null
+      console.warn("Could not find Retell audio element");
+      return null;
+    } catch (error) {
+      console.error("Error getting Retell audio element:", error);
+      return null;
+    }
+  };
 
   const handleFeedbackSubmit = async (formData: any) => {
     const result = await FeedbackService.submitFeedback({
