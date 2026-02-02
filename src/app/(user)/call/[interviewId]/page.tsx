@@ -90,10 +90,6 @@ function InterviewInterface({ params }: Props) {
     } catch (err) { setPermissionError(true); }
   };
 
-  /**
-   * HYBRID AUDIO MIXER
-   * Captures AI voice from internal playback and uses Screen Audio as a fallback.
-   */
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     try {
       chunksRef.current = [];
@@ -102,42 +98,40 @@ function InterviewInterface({ params }: Props) {
       audioCtxRef.current = audioCtx;
       const destination = audioCtx.createMediaStreamDestination();
 
-      // 1. Connect Candidate Microphone
+      // Connect Mic
       const sourceMic = audioCtx.createMediaStreamSource(stream);
       sourceMic.connect(destination);
 
-      // 2. Trigger Screen/Tab Capture as Audio Source
+      // Trigger Tab/Screen Audio Capture
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: { echoCancellation: true, noiseSuppression: true }
       });
 
+      // Patch Tab Audio (AI Voice) into the recording
       if (screenStream.getAudioTracks().length > 0) {
-        const sourceScreenAudio = audioCtx.createMediaStreamSource(screenStream);
-        sourceScreenAudio.connect(destination);
+        const sourceTabAudio = audioCtx.createMediaStreamSource(screenStream);
+        sourceTabAudio.connect(destination);
       }
 
-      // Stop the extra screen video track to save CPU
+      // Stop extra screen share video track
       screenStream.getVideoTracks().forEach(track => track.stop());
 
-      // 3. Build Final Stream (Camera Video + Mixed Audio)
-      const combinedStream = new MediaStream([
-        ...stream.getVideoTracks(),
-        ...destination.stream.getAudioTracks()
+      const recordingStream = new MediaStream([
+        ...stream.getVideoTracks(), // Real Camera
+        ...destination.stream.getAudioTracks() // Mixed Audio (Mic + AI)
       ]);
 
-      const recorder = new MediaRecorder(combinedStream, {
+      const recorder = new MediaRecorder(recordingStream, {
         mimeType: "video/webm;codecs=vp8,opus",
       });
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
 
       recorder.onstop = async () => {
         if (chunksRef.current.length === 0) return;
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
-        const fileName = `interview-${callId}-${Date.now()}.webm`;
+        const fileName = `${callId}-${Date.now()}.webm`;
 
         const { data, error } = await supabase.storage
           .from("interview-videos")
@@ -153,9 +147,7 @@ function InterviewInterface({ params }: Props) {
       recorder.start(1000);
       mediaRecorderRef.current = recorder;
 
-    } catch (err) {
-      console.error("Recording failed to start", err);
-    }
+    } catch (err) { console.error("Capture failed:", err); }
   };
 
   const stopVideoRecording = () => {
@@ -172,8 +164,8 @@ function InterviewInterface({ params }: Props) {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
           <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          <h1 className="mb-2 text-2xl font-bold">Hardware Verification</h1>
-          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
+          <h1 className="mb-2 text-2xl font-bold">Ready to start?</h1>
+          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900">
             {mediaStream ? (
               <video autoPlay muted playsInline className="h-full w-full object-cover" ref={(el) => { if (el) el.srcObject = mediaStream; }} />
             ) : (
@@ -183,7 +175,7 @@ function InterviewInterface({ params }: Props) {
           {!mediaStream ? (
             <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-700">Enable Camera & Mic</button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Hardware Verified <CheckCircle size={20} /></button>
+            <button onClick={() => setIsVerified(true)} className="flex w-full items-center justify-center gap-2 rounded-xl bg-green-600 py-3 font-bold text-white transition-all hover:bg-green-700">Verify Hardware <CheckCircle size={20} /></button>
           )}
         </div>
       </div>
