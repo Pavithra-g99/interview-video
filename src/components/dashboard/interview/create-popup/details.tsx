@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from "react";
+"use client";
+
+import React, { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 import { useInterviewers } from "@/contexts/interviewers.context";
@@ -55,6 +57,20 @@ function DetailsPopup({
   );
   const [duration, setDuration] = useState(interviewData.time_duration);
   const [uploadedDocumentContext, setUploadedDocumentContext] = useState("");
+
+  // --- DEDUPLICATION LOGIC START ---
+  // Filters out duplicate Lisas and Bobs based on their names
+  const uniqueSelectionList = useMemo(() => {
+    return interviewers.reduce((acc: any[], current: any) => {
+      const isDuplicate = acc.find((item) => item.name === current.name);
+      if (!isDuplicate) {
+        return acc.concat([current]);
+      } else {
+        return acc;
+      }
+    }, []);
+  }, [interviewers]);
+  // --- DEDUPLICATION LOGIC END ---
 
   const slideLeft = (id: string, value: number) => {
     var slider = document.getElementById(`${id}`);
@@ -162,13 +178,14 @@ function DetailsPopup({
               id="slider-3"
               className=" h-36 pt-1 overflow-x-scroll scroll whitespace-nowrap scroll-smooth scrollbar-hide w-[27.5rem]"
             >
-              {interviewers.map((item, key) => (
+              {/* Mapping only unique Lisas and Bobs here */}
+              {uniqueSelectionList.map((item: any) => (
                 <div
                   className=" p-0 inline-block cursor-pointer ml-1 mr-5 rounded-xl shrink-0 overflow-hidden"
                   key={item.id}
                 >
                   <button
-                    className="absolute ml-9"
+                    className="absolute ml-9 z-10"
                     onClick={(e) => {
                       e.stopPropagation();
                       setInterviewerDetails(item);
@@ -178,28 +195,28 @@ function DetailsPopup({
                     <Info size={18} color="#4f46e5" strokeWidth={2.2} />
                   </button>
                   <div
-                    className={`w-[96px] overflow-hidden rounded-full ${
+                    className={`w-[96px] h-[96px] overflow-hidden rounded-full ${
                       selectedInterviewer === item.id
-                        ? "border-4 border-indigo-600"
+                        ? "border-4 border-indigo-600 shadow-md"
                         : ""
                     }`}
                     onClick={() => setSelectedInterviewer(item.id)}
                   >
                     <Image
                       src={item.image}
-                      alt="Picture of the interviewer"
-                      width={70}
-                      height={70}
+                      alt={item.name}
+                      width={96}
+                      height={96}
                       className="w-full h-full object-cover"
                     />
                   </div>
-                  <CardTitle className="mt-0 text-xs text-center">
+                  <CardTitle className="mt-1 text-[11px] text-center font-bold">
                     {item.name}
                   </CardTitle>
                 </div>
               ))}
             </div>
-            {interviewers.length > 4 ? (
+            {uniqueSelectionList.length > 4 ? (
               <div className="flex-row justify-center ml-3 mb-1 items-center space-y-6">
                 <ChevronRight
                   className="opacity-50 cursor-pointer hover:opacity-100"
@@ -212,11 +229,10 @@ function DetailsPopup({
                   onClick={() => slideLeft("slider-3", 115)}
                 />
               </div>
-            ) : (
-              <></>
-            )}
+            ) : null}
           </div>
           <h3 className="text-sm font-medium">Objective:</h3>
+          <button type="button" className="hidden" /> {/* Fix for focus issues */}
           <Textarea
             value={objective}
             className="h-24 mt-2 border-2 border-gray-500 w-[33.2rem]"
