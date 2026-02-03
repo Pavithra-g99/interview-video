@@ -9,6 +9,7 @@ import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
+import { toast } from "sonner"; // Added to handle recording feedback
 
 interface PageProps {
   params: {
@@ -51,18 +52,57 @@ export default function InterviewInterface({ params }: PageProps) {
 
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8,opus" });
+    
+    // MODIFIED: Lowered bitrate (100kbps) to allow longer interviews to fit in 50MB limit
+    const recorder = new MediaRecorder(stream, { 
+      mimeType: "video/webm;codecs=vp8,opus",
+      videoBitsPerSecond: 100000 
+    });
+
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    
     recorder.onstop = async () => {
       if (chunksRef.current.length === 0) return;
+      
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
+
+      // MODIFIED: Added safety check for 50MB Free Plan limit
+      if (blob.size > 50 * 1024 * 1024) {
+        toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
+        return;
+      }
+
       const fileName = `interview-${callId}-${Date.now()}.webm`;
-      const { data } = await supabase.storage.from("interview-videos").upload(fileName, blob, { contentType: 'video/webm' });
-      if (data) {
-        const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
-        await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
+      
+      // MODIFIED: Resilient upload and URL saving logic
+      try {
+        const { data, error: uploadError } = await supabase.storage
+          .from("interview-videos")
+          .upload(fileName, blob, { 
+            contentType: 'video/webm',
+            cacheControl: '3600',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        if (data) {
+          const { data: { publicUrl } } = supabase.storage
+            .from("interview-videos")
+            .getPublicUrl(fileName);
+          
+          await axios.post("/api/save-video-url", { 
+            call_id: callId, 
+            videoUrl: publicUrl 
+          });
+          toast.success("Recording saved successfully");
+        }
+      } catch (error) {
+        console.error("Recording failed to save:", error);
+        toast.error("Failed to save video to cloud.");
       }
     };
+
     recorder.start(1000);
     mediaRecorderRef.current = recorder;
   };
@@ -83,6 +123,7 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
+            {/* Dynamic duration from DB */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
