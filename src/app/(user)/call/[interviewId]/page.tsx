@@ -4,39 +4,16 @@ import { useInterviews } from "@/contexts/interviews.context";
 import React, { useEffect, useState, useRef } from "react";
 import Call from "@/components/call";
 import Image from "next/image";
-import { ArrowUpRightSquareIcon, ShieldCheck, Clock } from "lucide-react";
+import { ShieldCheck, Clock } from "lucide-react";
 import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
-// Standard Next.js App Router PageProps
 interface PageProps {
   params: {
     interviewId: string;
   };
-}
-
-function PopupLoader() {
-  return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl z-50">
-      <div className="h-[88vh] flex flex-col items-center justify-center rounded-lg border-2 border-black font-bold">
-        <LoaderWithText />
-      </div>
-    </div>
-  );
-}
-
-function PopUpMessage({ title, description, image }: { title: string; description: string; image: string }) {
-  return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl z-50">
-      <div className="h-[88vh] flex flex-col items-center justify-center px-6 text-center border-2 border-black rounded-lg">
-        <Image src={image} alt="Status" width={200} height={200} className="mb-4" />
-        <h1 className="mb-2 text-md font-medium">{title}</h1>
-        <p className="text-gray-600">{description}</p>
-      </div>
-    </div>
-  );
 }
 
 export default function InterviewInterface({ params }: PageProps) {
@@ -91,7 +68,11 @@ export default function InterviewInterface({ params }: PageProps) {
   };
 
   if (!interview) {
-    return interviewNotFound ? <PopUpMessage title="Not Found" description="Link expired." image="/invalid-url.png" /> : <PopupLoader />;
+    return interviewNotFound ? (
+      <div className="flex h-screen items-center justify-center font-bold">Invalid URL</div>
+    ) : (
+      <div className="flex h-screen items-center justify-center"><LoaderWithText /></div>
+    );
   }
 
   if (!isVerified) {
@@ -102,7 +83,6 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
-            {/* DURATION FIX: Pulls dynamic duration from DB */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
@@ -126,8 +106,8 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      /* BUILD FIX: Explicitly ignore first arg (audio) and pass second arg (id) */
-      onStartRecording={(_, id) => startVideoRecording(mediaStream!, id)} 
+      /* FIX: Explicitly typed parameters to prevent "any" type build error */
+      onStartRecording={(_: HTMLAudioElement | null, id: string) => startVideoRecording(mediaStream!, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
   );
