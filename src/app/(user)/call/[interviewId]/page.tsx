@@ -10,7 +10,7 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
-// NEXT.JS FIX: The params object must be typed exactly like this for the build to pass
+// NEXT.JS FIX: Explicitly type the params
 interface PageProps {
   params: {
     interviewId: string;
@@ -52,6 +52,7 @@ export default function InterviewInterface({ params }: PageProps) {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     const fetchInterview = async () => {
@@ -73,25 +74,50 @@ export default function InterviewInterface({ params }: PageProps) {
     } catch (err) { console.error("Hardware denied"); }
   };
 
-  const startVideoRecording = async (stream: MediaStream, callId: string) => {
-    chunksRef.current = [];
-    const recorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp8,opus" });
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-    recorder.onstop = async () => {
-      if (chunksRef.current.length === 0) return;
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
-      const fileName = `interview-${callId}-${Date.now()}.webm`;
-      const { data } = await supabase.storage.from("interview-videos").upload(fileName, blob, { contentType: 'video/webm' });
-      if (data) {
-        const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
-        await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
+  const startVideoRecording = async (userStream: MediaStream, remoteAudioElement: HTMLAudioElement | null, callId: string) => {
+    try {
+      chunksRef.current = [];
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const destination = audioContext.createMediaStreamDestination();
+
+      const userAudioTrack = userStream.getAudioTracks()[0];
+      if (userAudioTrack) {
+        const userAudioSource = audioContext.createMediaStreamSource(new MediaStream([userAudioTrack]));
+        userAudioSource.connect(destination);
       }
-    };
-    recorder.start(1000);
-    mediaRecorderRef.current = recorder;
+
+      if (remoteAudioElement) {
+        try {
+          const remoteAudioSource = audioContext.createMediaElementSource(remoteAudioElement);
+          remoteAudioSource.connect(destination);
+          remoteAudioSource.connect(audioContext.destination);
+        } catch (e) { console.warn("Remote audio capture failed:", e); }
+      }
+
+      const videoTrack = userStream.getVideoTracks()[0];
+      const mixedAudioTrack = destination.stream.getAudioTracks()[0];
+      const combinedStream = new MediaStream([videoTrack, mixedAudioTrack]);
+
+      const recorder = new MediaRecorder(combinedStream, { mimeType: "video/webm;codecs=vp8,opus" });
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      recorder.onstop = async () => {
+        if (chunksRef.current.length === 0) return;
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const fileName = `interview-${callId}-${Date.now()}.webm`;
+        const { data } = await supabase.storage.from("interview-videos").upload(fileName, blob, { contentType: 'video/webm' });
+        if (data) {
+          const { data: { publicUrl } } = supabase.storage.from("interview-videos").getPublicUrl(fileName);
+          await axios.post("/api/save-video-url", { call_id: callId, videoUrl: publicUrl });
+        }
+        if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
+      };
+
+      recorder.start(1000);
+      mediaRecorderRef.current = recorder;
+    } catch (error) { console.error("Recording start failed:", error); }
   };
 
-  // Build safety check
   if (!interview) {
     return interviewNotFound ? <PopUpMessage title="Not Found" description="Link expired." image="/invalid-url.png" /> : <PopupLoader />;
   }
@@ -101,13 +127,11 @@ export default function InterviewInterface({ params }: PageProps) {
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
         <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
           <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          {/* DURATION FIX: Ensure correct duration is shown in the header before starting */}
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
-
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
             {mediaStream ? (
               <video autoPlay muted playsInline className="h-full w-full object-cover" ref={(el) => { if (el) el.srcObject = mediaStream; }} />
@@ -129,7 +153,8 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      onStartRecording={(id) => startVideoRecording(mediaStream!, id)} 
+      // BUILD FIX: Pass the arguments correctly to match the startVideoRecording signature
+      onStartRecording={(remoteAudioEl, id) => startVideoRecording(mediaStream!, remoteAudioEl, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
   );
