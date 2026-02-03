@@ -10,7 +10,12 @@ import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
 
-type PageProps = { params: { interviewId: string } };
+// Standard Next.js App Router PageProps
+interface PageProps {
+  params: {
+    interviewId: string;
+  };
+}
 
 function PopupLoader() {
   return (
@@ -89,11 +94,6 @@ export default function InterviewInterface({ params }: PageProps) {
     return interviewNotFound ? <PopUpMessage title="Not Found" description="Link expired." image="/invalid-url.png" /> : <PopupLoader />;
   }
 
-  // Check if interview is active
-  if (interview.is_active === false) {
-    return <PopUpMessage title="Unavailable" description="This interview is no longer accepting responses." image="/closed.png" />;
-  }
-
   if (!isVerified) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
@@ -102,7 +102,7 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
-            {/* Displaying dynamic duration from database */}
+            {/* DURATION FIX: Pulls dynamic duration from DB */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
@@ -126,7 +126,8 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      onStartRecording={(id) => startVideoRecording(mediaStream!, id)} 
+      /* BUILD FIX: Explicitly ignore first arg (audio) and pass second arg (id) */
+      onStartRecording={(_, id) => startVideoRecording(mediaStream!, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
   );
