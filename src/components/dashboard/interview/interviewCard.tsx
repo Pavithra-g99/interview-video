@@ -26,8 +26,9 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
   const [isFetching, setIsFetching] = useState(false);
   const [img, setImg] = useState("");
 
-  // Construct the absolute base URL dynamically
+  // Helper to generate the full absolute URL to fix 'undefined' errors
   const getFullInterviewUrl = () => {
+    // Detects the current origin (e.g., https://interview-video-alpha.vercel.app)
     const origin = typeof window !== "undefined" && window.location.origin 
       ? window.location.origin 
       : "https://interview-video-alpha.vercel.app";
@@ -76,11 +77,11 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
   }, [id]);
 
   const copyToClipboard = () => {
-    const fullUrl = getFullInterviewUrl(); // Use the absolute URL helper
+    const fullUrl = getFullInterviewUrl(); // Uses absolute helper
     navigator.clipboard.writeText(fullUrl).then(
       () => {
         setCopied(true);
-        toast.success("The full link to your interview has been copied.", {
+        toast.success("The full link to your interview has been copied to your clipboard.", {
           position: "bottom-right",
           duration: 3000,
         });
@@ -93,7 +94,8 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
   const handleJumpToInterview = (event: React.MouseEvent) => {
     event.stopPropagation();
     event.preventDefault();
-    // Fix: Use the absolute URL to prevent 'undefined' domain errors
+    
+    // Fix: Use the absolute URL helper to prevent 'undefined' domain errors
     const fullUrl = getFullInterviewUrl();
     window.open(fullUrl, "_blank");
   };
