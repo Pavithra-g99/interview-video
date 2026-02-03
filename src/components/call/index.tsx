@@ -98,3 +98,22 @@ function Call({
 }
 
 export default Call;
+
+// Find the state declaration and update it
+const [interviewTimeDuration, setInterviewTimeDuration] = useState<string>(
+  interview?.time_duration || "15"
+);
+
+// Add this useEffect to keep the state in sync
+useEffect(() => {
+  if (interview?.time_duration) {
+    setInterviewTimeDuration(interview.time_duration);
+  }
+}, [interview]);
+
+// Ensure your progress bar calculation uses Number(interviewTimeDuration)
+style={{
+  width: isEnded
+    ? "100%"
+    : `${(time / (Number(interviewTimeDuration) * 60)) * 100}%`,
+}}
