@@ -1,212 +1,139 @@
 "use client";
 
-import { useInterviews } from "@/contexts/interviews.context";
-import React, { useEffect, useState, useRef } from "react";
-import Call from "@/components/call";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { ArrowUpRightSquareIcon, Video, CheckCircle, ShieldCheck } from "lucide-react";
-import { Interview } from "@/types/interview";
-import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Copy, ArrowUpRight, CopyCheck } from "lucide-react";
+import { ResponseService } from "@/services/responses.service";
+import { InterviewerService } from "@/services/interviewers.service";
 import axios from "axios";
+import MiniLoader from "@/components/loaders/mini-loader/miniLoader";
 
-type Props = { params: { interviewId: string } };
-
-// UI Components for loading and errors
-function PopupLoader() {
-  return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl">
-      <div className="h-[88vh] items-center justify-center rounded-lg border-2 border-black font-bold flex flex-col">
-        <LoaderWithText />
-      </div>
-    </div>
-  );
+interface Props {
+  name: string | null;
+  interviewerId: bigint;
+  id: string;
+  url: string;
+  readableSlug: string;
 }
 
-function PopUpMessage({ title, description, image }: { title: string; description: string; image: string }) {
-  return (
-    <div className="absolute left-1/2 top-1/2 w-[90%] -translate-x-1/2 -translate-y-1/2 rounded-md bg-white md:w-[80%] shadow-2xl">
-      <div className="h-[88vh] flex flex-col items-center justify-center px-6 text-center border-2 border-black rounded-lg">
-        <Image src={image} alt="Graphic" width={200} height={200} className="mb-4" />
-        <h1 className="mb-2 text-md font-medium">{title}</h1>
-        <p className="text-gray-600">{description}</p>
-      </div>
-    </div>
-  );
-}
+function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
+  const [copied, setCopied] = useState(false);
+  const [responseCount, setResponseCount] = useState<number | null>(null);
+  const [isFetching, setIsFetching] = useState(false);
+  const [img, setImg] = useState("");
 
-export default function InterviewInterface({ params }: Props) {
-  const { interviewId } = params;
-  const supabase = createClientComponentClient();
-  const { getInterviewById } = useInterviews();
-
-  const [interview, setInterview] = useState<Interview | undefined>(undefined);
-  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [isVerified, setIsVerified] = useState(false);
-  const [interviewNotFound, setInterviewNotFound] = useState(false);
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const destinationRef = useRef<MediaStreamAudioDestinationNode | null>(null);
+  // Helper to generate the full absolute URL
+  const getFullInterviewUrl = () => {
+    // Detects the current origin (e.g., https://interview-video-alpha.vercel.app)
+    const origin = typeof window !== "undefined" && window.location.origin 
+      ? window.location.origin 
+      : "https://interview-video-alpha.vercel.app";
+    
+    // Uses readableSlug if available, otherwise falls back to url
+    const slug = readableSlug || url;
+    return `${origin}/call/${slug}`;
+  };
 
   useEffect(() => {
-    const fetchInterview = async () => {
+    const fetchInterviewer = async () => {
+      const interviewer = await InterviewerService.getInterviewer(interviewerId);
+      setImg(interviewer.image);
+    };
+    fetchInterviewer();
+  }, [interviewerId]);
+
+  useEffect(() => {
+    const fetchResponses = async () => {
       try {
-        const response = await getInterviewById(interviewId);
-        if (response) {
-          setInterview(response);
-          document.title = response.name;
-        } else { setInterviewNotFound(true); }
-      } catch (error) { setInterviewNotFound(true); }
-    };
-    fetchInterview();
-  }, [interviewId, getInterviewById]);
-
-  const requestPermissions = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setMediaStream(stream);
-    } catch (err) { console.error("Hardware permission denied"); }
-  };
-
-  const startVideoRecording = async (userStream: MediaStream, remoteAudioElement: HTMLAudioElement | null, callId: string) => {
-    try {
-      chunksRef.current = [];
-
-      // Create audio context for mixing
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-
-      // Create destination for mixed audio
-      const destination = audioContext.createMediaStreamDestination();
-      destinationRef.current = destination;
-
-      // Add user's microphone audio
-      const userAudioTrack = userStream.getAudioTracks()[0];
-      if (userAudioTrack) {
-        const userAudioSource = audioContext.createMediaStreamSource(
-          new MediaStream([userAudioTrack])
-        );
-        userAudioSource.connect(destination);
-      }
-
-      // Add remote audio (interviewer's voice) if available
-      if (remoteAudioElement) {
-        try {
-          const remoteAudioSource = audioContext.createMediaElementSource(remoteAudioElement);
-          remoteAudioSource.connect(destination);
-          // Also connect to audio context destination so we can still hear it
-          remoteAudioSource.connect(audioContext.destination);
-        } catch (error) {
-          console.warn("Could not capture remote audio:", error);
-        }
-      }
-
-      // Create combined stream with user's video and mixed audio
-      const videoTrack = userStream.getVideoTracks()[0];
-      const mixedAudioTrack = destination.stream.getAudioTracks()[0];
-      
-      const combinedStream = new MediaStream([videoTrack, mixedAudioTrack]);
-
-      // Start recording with combined stream
-      const recorder = new MediaRecorder(combinedStream, { 
-        mimeType: "video/webm;codecs=vp8,opus" 
-      });
-
-      recorder.ondataavailable = (e) => { 
-        if (e.data.size > 0) chunksRef.current.push(e.data); 
-      };
-
-      recorder.onstop = async () => {
-        if (chunksRef.current.length === 0) return;
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
-        const fileName = `interview-${callId}-${Date.now()}.webm`;
-        
-        const { data } = await supabase.storage
-          .from("interview-videos")
-          .upload(fileName, blob, { contentType: 'video/webm' });
-        
-        if (data) {
-          const { data: { publicUrl } } = supabase.storage
-            .from("interview-videos")
-            .getPublicUrl(fileName);
-          await axios.post("/api/save-video-url", { 
-            call_id: callId, 
-            videoUrl: publicUrl 
-          });
-        }
-
-        // Clean up audio context
-        if (audioContextRef.current) {
-          audioContextRef.current.close();
-          audioContextRef.current = null;
-        }
-      };
-
-      recorder.start(1000);
-      mediaRecorderRef.current = recorder;
-
-    } catch (error) {
-      console.error("Error starting video recording:", error);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-    }
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
+        const responses = await ResponseService.getAllResponses(id);
+        setResponseCount(responses.length);
+      } catch (error) {
+        console.error(error);
       }
     };
-  }, []);
+    fetchResponses();
+  }, [id]);
 
-  // 1. Handle Loading/NotFound States
-  if (!interview) {
-    return interviewNotFound ? (
-      <PopUpMessage title="Invalid URL" description="Please check the link and try again." image="/invalid-url.png" />
-    ) : (
-      <PopupLoader />
+  const copyToClipboard = () => {
+    const fullUrl = getFullInterviewUrl(); // Generates full link
+    navigator.clipboard.writeText(fullUrl).then(
+      () => {
+        setCopied(true);
+        toast.success("Full link copied to clipboard!", {
+          position: "bottom-right",
+          duration: 3000,
+        });
+        setTimeout(() => setCopied(false), 2000);
+      },
+      (err) => console.log("failed to copy", err)
     );
-  }
+  };
 
-  // 2. Handle Hardware Verification
-  if (!isVerified) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
-        <div className="w-full max-w-lg rounded-2xl border-2 border-indigo-100 bg-white p-8 text-center shadow-xl">
-          <ShieldCheck className="mx-auto mb-4 h-16 w-16 text-indigo-600" />
-          <h1 className="mb-6 text-2xl font-bold">Hardware Check</h1>
-          <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
-            {mediaStream ? (
-              <video autoPlay muted playsInline className="h-full w-full object-cover" ref={(el) => { if (el) el.srcObject = mediaStream; }} />
-            ) : (
-              <div className="flex h-full items-center justify-center text-white italic">Preview Loading...</div>
-            )}
-          </div>
-          {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700 transition-all">Enable Hardware</button>
-          ) : (
-            <button onClick={() => setIsVerified(true)} className="w-full rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700 transition-all">Start Interview</button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  const handleJumpToInterview = (event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    // Opens the full URL to prevent the 'undefined' error
+    window.open(getFullInterviewUrl(), "_blank"); 
+  };
 
-  // 3. Render Call
   return (
-    <Call 
-      interview={interview} 
-      videoStream={mediaStream} 
-      onStartRecording={(remoteAudioEl, id) => startVideoRecording(mediaStream!, remoteAudioEl, id)} 
-      onStopRecording={stopRecording} 
-    />
+    <a
+      href={`/interviews/${id}`}
+      style={{
+        pointerEvents: isFetching ? "none" : "auto",
+        cursor: isFetching ? "default" : "pointer",
+      }}
+    >
+      <Card className="relative p-0 mt-4 inline-block cursor-pointer h-60 w-56 ml-1 mr-3 rounded-xl shrink-0 overflow-hidden shadow-md">
+        <CardContent className={`p-0 ${isFetching ? "opacity-60" : ""}`}>
+          <div className="w-full h-40 overflow-hidden bg-indigo-600 flex items-center text-center">
+            <CardTitle className="w-full mt-3 mx-2 text-white text-lg">
+              {name}
+            </CardTitle>
+          </div>
+          <div className="flex flex-row items-center mx-4 ">
+            <div className="w-full overflow-hidden">
+              <Image
+                src={img || "/placeholder.png"}
+                alt="Interviewer"
+                width={70}
+                height={70}
+                className="object-cover object-center"
+              />
+            </div>
+            <div className="text-black text-sm font-semibold mt-2 mr-2 whitespace-nowrap">
+              Responses: <span className="font-normal">{responseCount ?? 0}</span>
+            </div>
+          </div>
+          <div className="absolute top-2 right-2 flex gap-1">
+            <Button
+              className="text-xs text-indigo-600 px-1 h-6"
+              variant={"secondary"}
+              onClick={handleJumpToInterview}
+            >
+              <ArrowUpRight size={16} />
+            </Button>
+            <Button
+              className={`text-xs text-indigo-600 px-1 h-6 ${
+                copied ? "bg-indigo-300 text-white" : ""
+              }`}
+              variant={"secondary"}
+              onClick={(event) => {
+                event.stopPropagation();
+                event.preventDefault();
+                copyToClipboard();
+              }}
+            >
+              {copied ? <CopyCheck size={16} /> : <Copy size={16} />}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </a>
   );
 }
+
+export default InterviewCard;
