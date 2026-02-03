@@ -58,8 +58,7 @@ function DetailsPopup({
   const [duration, setDuration] = useState(interviewData.time_duration);
   const [uploadedDocumentContext, setUploadedDocumentContext] = useState("");
 
-  // --- DEDUPLICATION LOGIC START ---
-  // Filters out duplicate Lisas and Bobs based on their names
+  // DEDUPLICATION: Ensures only one unique icon per interviewer name
   const uniqueSelectionList = useMemo(() => {
     return interviewers.reduce((acc: any[], current: any) => {
       const isDuplicate = acc.find((item) => item.name === current.name);
@@ -70,7 +69,6 @@ function DetailsPopup({
       }
     }, []);
   }, [interviewers]);
-  // --- DEDUPLICATION LOGIC END ---
 
   const slideLeft = (id: string, value: number) => {
     var slider = document.getElementById(`${id}`);
@@ -120,7 +118,7 @@ function DetailsPopup({
       questions: updatedQuestions,
       interviewer_id: selectedInterviewer,
       question_count: Number(numQuestions),
-      time_duration: duration,
+      time_duration: String(duration), // FIX: Correctly maps the 15 min value
       description: generatedQuestionsResponse.description,
       is_anonymous: isAnonymous,
     };
@@ -137,7 +135,7 @@ function DetailsPopup({
       questions: [{ id: uuidv4(), question: "", follow_up_count: 1 }],
       interviewer_id: selectedInterviewer,
       question_count: Number(numQuestions),
-      time_duration: String(duration),
+      time_duration: String(duration), // FIX: Correctly maps the 15 min value
       description: "",
       is_anonymous: isAnonymous,
     };
@@ -178,7 +176,6 @@ function DetailsPopup({
               id="slider-3"
               className=" h-36 pt-1 overflow-x-scroll scroll whitespace-nowrap scroll-smooth scrollbar-hide w-[27.5rem]"
             >
-              {/* Mapping only unique Lisas and Bobs here */}
               {uniqueSelectionList.map((item: any) => (
                 <div
                   className=" p-0 inline-block cursor-pointer ml-1 mr-5 rounded-xl shrink-0 overflow-hidden"
@@ -232,7 +229,6 @@ function DetailsPopup({
             ) : null}
           </div>
           <h3 className="text-sm font-medium">Objective:</h3>
-          <button type="button" className="hidden" /> {/* Fix for focus issues */}
           <Textarea
             value={objective}
             className="h-24 mt-2 border-2 border-gray-500 w-[33.2rem]"
