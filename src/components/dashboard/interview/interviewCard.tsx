@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -18,23 +20,30 @@ interface Props {
   readableSlug: string;
 }
 
-const base_url = process.env.NEXT_PUBLIC_LIVE_URL;
-
 function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
   const [copied, setCopied] = useState(false);
   const [responseCount, setResponseCount] = useState<number | null>(null);
   const [isFetching, setIsFetching] = useState(false);
   const [img, setImg] = useState("");
 
+  // Construct the absolute base URL dynamically
+  const getFullInterviewUrl = () => {
+    const origin = typeof window !== "undefined" && window.location.origin 
+      ? window.location.origin 
+      : "https://interview-video-alpha.vercel.app";
+    
+    // Prioritize readableSlug, fallback to url
+    const slug = readableSlug || url;
+    return `${origin}/call/${slug}`;
+  };
+
   useEffect(() => {
     const fetchInterviewer = async () => {
-      const interviewer =
-        await InterviewerService.getInterviewer(interviewerId);
+      const interviewer = await InterviewerService.getInterviewer(interviewerId);
       setImg(interviewer.image);
     };
     fetchInterviewer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [interviewerId]);
 
   useEffect(() => {
     const fetchResponses = async () => {
@@ -49,15 +58,11 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
                 const result = await axios.post("/api/get-call", {
                   id: response.call_id,
                 });
-
                 if (result.status !== 200) {
                   throw new Error(`HTTP error! status: ${result.status}`);
                 }
               } catch (error) {
-                console.error(
-                  `Failed to call api/get-call for response id ${response.call_id}:`,
-                  error,
-                );
+                console.error(`Failed to call api/get-call for response id ${response.call_id}:`, error);
               }
             }
           }
@@ -67,43 +72,30 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
         console.error(error);
       }
     };
-
     fetchResponses();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [id]);
 
   const copyToClipboard = () => {
-    navigator.clipboard
-      .writeText(
-        readableSlug ? `${base_url}/call/${readableSlug}` : (url as string),
-      )
-      .then(
-        () => {
-          setCopied(true);
-          toast.success(
-            "The link to your interview has been copied to your clipboard.",
-            {
-              position: "bottom-right",
-              duration: 3000,
-            },
-          );
-          setTimeout(() => {
-            setCopied(false);
-          }, 2000);
-        },
-        (err) => {
-          console.log("failed to copy", err.mesage);
-        },
-      );
+    const fullUrl = getFullInterviewUrl(); // Use the absolute URL helper
+    navigator.clipboard.writeText(fullUrl).then(
+      () => {
+        setCopied(true);
+        toast.success("The full link to your interview has been copied.", {
+          position: "bottom-right",
+          duration: 3000,
+        });
+        setTimeout(() => setCopied(false), 2000);
+      },
+      (err) => console.log("failed to copy", err.message)
+    );
   };
 
   const handleJumpToInterview = (event: React.MouseEvent) => {
     event.stopPropagation();
     event.preventDefault();
-    const interviewUrl = readableSlug
-      ? `/call/${readableSlug}`
-      : `/call/${url}`;
-    window.open(interviewUrl, "_blank");
+    // Fix: Use the absolute URL to prevent 'undefined' domain errors
+    const fullUrl = getFullInterviewUrl();
+    window.open(fullUrl, "_blank");
   };
 
   return (
@@ -129,18 +121,15 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
           <div className="flex flex-row items-center mx-4 ">
             <div className="w-full overflow-hidden">
               <Image
-                src={img}
-                alt="Picture of the interviewer"
+                src={img || "/placeholder-interviewer.png"}
+                alt="Interviewer"
                 width={70}
                 height={70}
                 className="object-cover object-center"
               />
             </div>
             <div className="text-black text-sm font-semibold mt-2 mr-2 whitespace-nowrap">
-              Responses:{" "}
-              <span className="font-normal">
-                {responseCount?.toString() || 0}
-              </span>
+              Responses: <span className="font-normal">{responseCount ?? 0}</span>
             </div>
           </div>
           <div className="absolute top-2 right-2 flex gap-1">
@@ -152,7 +141,7 @@ function InterviewCard({ name, interviewerId, id, url, readableSlug }: Props) {
               <ArrowUpRight size={16} />
             </Button>
             <Button
-              className={`text-xs text-indigo-600 px-1 h-6  ${
+              className={`text-xs text-indigo-600 px-1 h-6 ${
                 copied ? "bg-indigo-300 text-white" : ""
               }`}
               variant={"secondary"}
