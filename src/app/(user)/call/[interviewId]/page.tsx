@@ -9,7 +9,7 @@ import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
-import { toast } from "sonner";
+import { toast } from "sonner"; // Added to handle recording feedback
 
 interface PageProps {
   params: {
@@ -53,8 +53,8 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MAXIMUM COMPRESSION (15kbps): Ensures even a 60-minute video stays well under 50MB
-    // At this rate, 60 minutes = ~6.8 MB.
+    // MODIFIED: Maximum compression (15kbps) to fit 60-min videos under the 50MB limit
+    // At this rate, 60 minutes will be approximately 6.8 MB.
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
       videoBitsPerSecond: 15000 
@@ -67,9 +67,9 @@ export default function InterviewInterface({ params }: PageProps) {
       
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      // Physical safety check for Supabase Free Plan limit
+      // Safety check for 50MB Free Plan limit
       if (blob.size > 50 * 1024 * 1024) {
-        toast.error("Video exceeds 50MB limit. Try lowering quality or duration.");
+        toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
         return;
       }
 
@@ -99,7 +99,7 @@ export default function InterviewInterface({ params }: PageProps) {
         }
       } catch (error) {
         console.error("Recording failed to save:", error);
-        toast.error("Upload failed. Storage may be full.");
+        toast.error("Failed to save video to cloud.");
       }
     };
 
@@ -123,7 +123,7 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
-            {/* Dynamic duration from Database */}
+            {/* Dynamic duration from DB */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
@@ -134,9 +134,9 @@ export default function InterviewInterface({ params }: PageProps) {
             )}
           </div>
           {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700 transition-all">Enable Hardware</button>
+            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700">Enable Hardware</button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="w-full rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700 transition-all">Start Interview</button>
+            <button onClick={() => setIsVerified(true)} className="w-full rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700">Start Interview</button>
           )}
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      /* TypeScript Build Fix */
+      /* FIX: Explicitly typed parameters to prevent "any" type build error */
       onStartRecording={(_: HTMLAudioElement | null, id: string) => startVideoRecording(mediaStream!, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
