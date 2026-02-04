@@ -53,10 +53,11 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MODIFIED: 8000 bps ensures 60-min videos stay ~3.6MB, bypassing the 50MB limit
+    // MODIFIED: Ultra-Extreme Compression (4000 bps) 
+    // This makes a 60-min video ~1.8 MB, easily fitting in your 50 MB storage
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 8000 
+      videoBitsPerSecond: 3000 
     });
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -66,7 +67,7 @@ export default function InterviewInterface({ params }: PageProps) {
       
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      // MODIFIED: Added safety check for 50MB Free Plan limit
+      // Safety check for 50MB Free Plan limit
       if (blob.size > 50 * 1024 * 1024) {
         toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
         return;
@@ -74,7 +75,6 @@ export default function InterviewInterface({ params }: PageProps) {
 
       const fileName = `interview-${callId}-${Date.now()}.webm`;
       
-      // MODIFIED: Resilient upload and URL saving logic
       try {
         const { data, error: uploadError } = await supabase.storage
           .from("interview-videos")
@@ -123,7 +123,6 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
-            {/* Dynamic duration from DB */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
@@ -147,7 +146,6 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      /* FIX: Explicitly typed parameters to prevent "any" type build error */
       onStartRecording={(_: HTMLAudioElement | null, id: string) => startVideoRecording(mediaStream!, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
