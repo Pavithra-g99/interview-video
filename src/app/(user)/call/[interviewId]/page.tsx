@@ -56,7 +56,7 @@ export default function InterviewInterface({ params }: PageProps) {
     // MODIFIED: Maximum compression (15kbps) to guarantee 60-min videos fit in 50MB
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 15000 
+      videoBitsPerSecond: 8000 
     });
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
