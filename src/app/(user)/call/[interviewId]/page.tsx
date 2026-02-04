@@ -53,7 +53,7 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MODIFIED: Maximum compression (15kbps) to guarantee 60-min videos fit in 50MB
+    // MODIFIED: 8000 bps ensures 60-min videos stay ~3.6MB, bypassing the 50MB limit
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
       videoBitsPerSecond: 8000 
@@ -66,7 +66,7 @@ export default function InterviewInterface({ params }: PageProps) {
       
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      // Safety check for 50MB Free Plan limit
+      // MODIFIED: Added safety check for 50MB Free Plan limit
       if (blob.size > 50 * 1024 * 1024) {
         toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
         return;
@@ -74,7 +74,7 @@ export default function InterviewInterface({ params }: PageProps) {
 
       const fileName = `interview-${callId}-${Date.now()}.webm`;
       
-      // Resilient upload and URL saving logic
+      // MODIFIED: Resilient upload and URL saving logic
       try {
         const { data, error: uploadError } = await supabase.storage
           .from("interview-videos")
