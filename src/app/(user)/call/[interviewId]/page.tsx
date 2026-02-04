@@ -9,7 +9,7 @@ import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
-import { toast } from "sonner"; // Added to handle recording feedback
+import { toast } from "sonner";
 
 interface PageProps {
   params: {
@@ -53,10 +53,11 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MODIFIED: Extremely low bitrate (50kbps) to maximize duration under the 50MB Free Plan limit
+    // MAXIMUM COMPRESSION (15kbps): Ensures even a 60-minute video stays well under 50MB
+    // At this rate, 60 minutes = ~6.8 MB.
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 50000 // Reduced from 100000 to 50000 to double the allowed time
+      videoBitsPerSecond: 15000 
     });
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -66,15 +67,14 @@ export default function InterviewInterface({ params }: PageProps) {
       
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
 
-      // MODIFIED: Added safety check for 50MB Free Plan limit
+      // Physical safety check for Supabase Free Plan limit
       if (blob.size > 50 * 1024 * 1024) {
-        toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
+        toast.error("Video exceeds 50MB limit. Try lowering quality or duration.");
         return;
       }
 
       const fileName = `interview-${callId}-${Date.now()}.webm`;
       
-      // MODIFIED: Resilient upload and URL saving logic
       try {
         const { data, error: uploadError } = await supabase.storage
           .from("interview-videos")
@@ -99,7 +99,7 @@ export default function InterviewInterface({ params }: PageProps) {
         }
       } catch (error) {
         console.error("Recording failed to save:", error);
-        toast.error("Failed to save video to cloud.");
+        toast.error("Upload failed. Storage may be full.");
       }
     };
 
@@ -123,7 +123,7 @@ export default function InterviewInterface({ params }: PageProps) {
           <h1 className="mb-2 text-2xl font-bold">{interview.name}</h1>
           <div className="flex items-center justify-center gap-1 text-sm text-gray-500 mb-6">
             <Clock size={14} />
-            {/* Dynamic duration from DB */}
+            {/* Dynamic duration from Database */}
             <span>Expected duration: {interview.time_duration || "15"} mins or less</span>
           </div>
           <div className="relative mb-6 aspect-video overflow-hidden rounded-xl border-4 border-slate-200 bg-slate-900 shadow-inner">
@@ -134,9 +134,9 @@ export default function InterviewInterface({ params }: PageProps) {
             )}
           </div>
           {!mediaStream ? (
-            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700">Enable Hardware</button>
+            <button onClick={requestPermissions} className="w-full rounded-xl bg-indigo-600 py-3 font-bold text-white hover:bg-indigo-700 transition-all">Enable Hardware</button>
           ) : (
-            <button onClick={() => setIsVerified(true)} className="w-full rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700">Start Interview</button>
+            <button onClick={() => setIsVerified(true)} className="w-full rounded-xl bg-green-600 py-3 font-bold text-white hover:bg-green-700 transition-all">Start Interview</button>
           )}
         </div>
       </div>
@@ -147,7 +147,7 @@ export default function InterviewInterface({ params }: PageProps) {
     <Call 
       interview={interview} 
       videoStream={mediaStream} 
-      /* FIX: Explicitly typed parameters to prevent "any" type build error */
+      /* TypeScript Build Fix */
       onStartRecording={(_: HTMLAudioElement | null, id: string) => startVideoRecording(mediaStream!, id)} 
       onStopRecording={() => mediaRecorderRef.current?.stop()} 
     />
