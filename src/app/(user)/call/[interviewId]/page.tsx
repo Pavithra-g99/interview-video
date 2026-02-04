@@ -9,7 +9,7 @@ import { Interview } from "@/types/interview";
 import LoaderWithText from "@/components/loaders/loader-with-text/loaderWithText";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import axios from "axios";
-import { toast } from "sonner"; // Added to handle recording feedback
+import { toast } from "sonner"; 
 
 interface PageProps {
   params: {
@@ -53,11 +53,10 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MODIFIED: Ultra-Extreme Compression (4000 bps) 
-    // This makes a 60-min video ~1.8 MB, easily fitting in your 50 MB storage
+    // Quality increased to 100kbps because UpCloud has no 50MB limit
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 3000 
+      videoBitsPerSecond: 100000 
     });
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
@@ -66,40 +65,28 @@ export default function InterviewInterface({ params }: PageProps) {
       if (chunksRef.current.length === 0) return;
       
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
-
-      // Safety check for 50MB Free Plan limit
-      if (blob.size > 50 * 1024 * 1024) {
-        toast.error("Video too large for Free Plan limits (50MB). Please try a shorter session.");
-        return;
-      }
-
-      const fileName = `interview-${callId}-${Date.now()}.webm`;
       
+      // We use FormData to send the file to your Node.js server
+      const formData = new FormData();
+      formData.append("video", blob, `interview-${callId}.webm`);
+
       try {
-        const { data, error: uploadError } = await supabase.storage
-          .from("interview-videos")
-          .upload(fileName, blob, { 
-            contentType: 'video/webm',
-            cacheControl: '3600',
-            upsert: false
-          });
+        toast.loading("Uploading session to UpCloud...");
 
-        if (uploadError) throw uploadError;
+        // 1. Upload directly to your UpCloud Server IP
+        const uploadRes = await axios.post("http://209.50.59.72:3001/upload", formData);
+        const videoUrl = uploadRes.data.url;
 
-        if (data) {
-          const { data: { publicUrl } } = supabase.storage
-            .from("interview-videos")
-            .getPublicUrl(fileName);
-          
-          await axios.post("/api/save-video-url", { 
-            call_id: callId, 
-            videoUrl: publicUrl 
-          });
-          toast.success("Recording saved successfully");
-        }
+        // 2. Save the UpCloud URL back to your database so it shows in dashboard
+        await axios.post("/api/save-video-url", { 
+          call_id: callId, 
+          videoUrl: videoUrl 
+        });
+
+        toast.success("Recording saved to UpCloud!");
       } catch (error) {
-        console.error("Recording failed to save:", error);
-        toast.error("Failed to save video to cloud.");
+        console.error("UpCloud upload failed:", error);
+        toast.error("Failed to save video to UpCloud.");
       }
     };
 
