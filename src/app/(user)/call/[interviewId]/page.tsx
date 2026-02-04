@@ -53,10 +53,10 @@ export default function InterviewInterface({ params }: PageProps) {
   const startVideoRecording = async (stream: MediaStream, callId: string) => {
     chunksRef.current = [];
     
-    // MODIFIED: Extremely low bitrate (50kbps) to maximize duration under the 50MB Free Plan limit
+    // MODIFIED: Lowered bitrate (100kbps) to allow longer interviews to fit in 50MB limit
     const recorder = new MediaRecorder(stream, { 
       mimeType: "video/webm;codecs=vp8,opus",
-      videoBitsPerSecond: 50000 // Reduced from 100000 to 50000 to double the allowed time
+      videoBitsPerSecond: 100000 
     });
 
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
